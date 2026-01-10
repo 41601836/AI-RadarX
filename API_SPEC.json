@@ -1,0 +1,1502 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "AI交易终端API接口规范",
+    "description": "股票交易分析系统六大核心模块API接口设计规范",
+    "version": "1.0.0",
+    "contact": {
+      "name": "技术团队",
+      "email": "tech@ai-trading-terminal.com"
+    }
+  },
+  "host": "api.ai-trading-terminal.com",
+  "basePath": "/api/v1",
+  "schemes": ["http", "https"],
+  "consumes": ["application/json"],
+  "produces": ["application/json"],
+  "securityDefinitions": {
+    "BearerAuth": {
+      "type": "apiKey",
+      "name": "Authorization",
+      "in": "header",
+      "description": "Bearer {token}"
+    }
+  },
+  "security": [{
+    "BearerAuth": []
+  }],
+  "tags": [
+    {
+      "name": "chip",
+      "description": "筹码分析模块"
+    },
+    {
+      "name": "publicOpinion",
+      "description": "舆情分析模块"
+    },
+    {
+      "name": "heatFlow",
+      "description": "游资行为分析模块"
+    },
+    {
+      "name": "largeOrder",
+      "description": "大单异动分析模块"
+    },
+    {
+      "name": "risk",
+      "description": "风险控制分析模块"
+    },
+    {
+      "name": "techIndicator",
+      "description": "技术分析模块"
+    },
+    {
+      "name": "market",
+      "description": "市场数据模块"
+    }
+  ],
+  "paths": {
+    "/chip/distribution": {
+      "get": {
+        "tags": ["chip"],
+        "summary": "获取单只股票筹码分布数据",
+        "description": "返回指定股票指定时间段内的筹码分布、集中度、主力成本等核心数据",
+        "parameters": [
+          {
+            "name": "stockCode",
+            "in": "query",
+            "required": true,
+            "type": "string",
+            "description": "股票代码（如 SH600000、SZ000001）"
+          },
+          {
+            "name": "startDate",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "description": "开始日期（yyyy-MM-dd），默认近 30 天"
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "description": "结束日期（yyyy-MM-dd），默认当天"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/ChipDistributionResponse"
+            }
+          },
+          "400": {
+            "description": "参数无效",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          }
+        }
+      }
+    },
+    "/chip/trend": {
+      "get": {
+        "tags": ["chip"],
+        "summary": "获取股票筹码趋势变化",
+        "description": "返回指定股票多日筹码集中度、主力成本趋势数据",
+        "parameters": [
+          {
+            "name": "stockCode",
+            "in": "query",
+            "required": true,
+            "type": "string",
+            "description": "股票代码"
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "description": "统计天数，默认 60 天，最大 365 天"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/ChipTrendResponse"
+            }
+          }
+        }
+      }
+    },
+    "/public-opinion/summary": {
+      "get": {
+        "tags": ["publicOpinion"],
+        "summary": "获取单只股票舆情汇总",
+        "description": "返回指定股票舆情情绪评分、热点事件、舆情趋势摘要",
+        "parameters": [
+          {
+            "name": "stockCode",
+            "in": "query",
+            "required": true,
+            "type": "string",
+            "description": "股票代码"
+          },
+          {
+            "name": "timeRange",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "enum": ["1d", "3d", "7d", "30d"],
+            "description": "时间范围，默认 7d"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/OpinionSummaryResponse"
+            }
+          }
+        }
+      }
+    },
+    "/public-opinion/list": {
+      "get": {
+        "tags": ["publicOpinion"],
+        "summary": "获取股票舆情详情列表",
+        "description": "分页返回指定股票的舆情原文、来源、情绪标签等详情",
+        "parameters": [
+          {
+            "name": "stockCode",
+            "in": "query",
+            "required": true,
+            "type": "string",
+            "description": "股票代码"
+          },
+          {
+            "name": "timeRange",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "enum": ["1d", "3d", "7d", "30d"],
+            "description": "时间范围，默认 7d"
+          },
+          {
+            "name": "sentimentType",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "enum": ["positive", "negative", "neutral"],
+            "description": "舆情类型"
+          },
+          {
+            "name": "pageNum",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "default": 1,
+            "description": "页码，从 1 开始"
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "default": 20,
+            "description": "每页条数，最大不超过 100"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/OpinionListResponse"
+            }
+          }
+        }
+      }
+    },
+    "/heat-flow/stock/seat": {
+      "get": {
+        "tags": ["heatFlow"],
+        "summary": "获取单只股票游资席位数据",
+        "description": "返回指定股票近期龙虎榜游资席位、净买入/卖出、操作风格等数据",
+        "parameters": [
+          {
+            "name": "stockCode",
+            "in": "query",
+            "required": true,
+            "type": "string",
+            "description": "股票代码"
+          },
+          {
+            "name": "startDate",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "description": "开始日期，默认近 7 天"
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "description": "结束日期，默认当天"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/HeatFlowStockSeatResponse"
+            }
+          }
+        }
+      }
+    },
+    "/heat-flow/alert/list": {
+      "get": {
+        "tags": ["heatFlow"],
+        "summary": "获取游资行为预警列表",
+        "description": "分页返回当前市场游资大额异动、联动操作等预警信息",
+        "parameters": [
+          {
+            "name": "alertLevel",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "enum": ["low", "medium", "high"],
+            "description": "预警等级"
+          },
+          {
+            "name": "pageNum",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "default": 1,
+            "description": "页码，从 1 开始"
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "default": 20,
+            "description": "每页条数，最大不超过 100"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/HeatFlowAlertListResponse"
+            }
+          }
+        }
+      }
+    },
+    "/heat-flow/seat/risk-scan": {
+      "get": {
+        "tags": ["heatFlow"],
+        "summary": "席位风险扫描",
+        "description": "实时监测龙虎榜，若拉萨天团席位 > 4 个，输出'规避'",
+        "parameters": [
+          {
+            "name": "stockCode",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "description": "可选，指定股票代码，不指定则扫描全部龙虎榜股票"
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "description": "可选，指定日期，默认当天"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/SeatRiskScanResponse"
+            }
+          }
+        }
+      }
+    },
+    "/order/large/real-time": {
+      "get": {
+        "tags": ["largeOrder"],
+        "summary": "获取单只股票实时大单数据",
+        "description": "返回指定股票当日实时大单（特大单）成交、净流入、异动信号",
+        "parameters": [
+          {
+            "name": "stockCode",
+            "in": "query",
+            "required": true,
+            "type": "string",
+            "description": "股票代码"
+          },
+          {
+            "name": "largeOrderThreshold",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "default": 5000000,
+            "description": "大单阈值（分）"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/LargeOrderRealTimeResponse"
+            }
+          }
+        }
+      }
+    },
+    "/order/large/trend": {
+      "get": {
+        "tags": ["largeOrder"],
+        "summary": "获取股票大单趋势数据",
+        "description": "返回指定股票大单净流入/流出的分时/日度趋势",
+        "parameters": [
+          {
+            "name": "stockCode",
+            "in": "query",
+            "required": true,
+            "type": "string",
+            "description": "股票代码"
+          },
+          {
+            "name": "timeType",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "enum": ["minute", "day"],
+            "default": "day",
+            "description": "时间类型"
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "default": 30,
+            "description": "统计天数"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/LargeOrderTrendResponse"
+            }
+          }
+        }
+      }
+    },
+    "/risk/account/assessment": {
+      "get": {
+        "tags": ["risk"],
+        "summary": "获取账户风险评估报告",
+        "description": "返回当前登录账户的持仓风险、VaR、仓位合规性等评估数据",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/RiskAccountAssessmentResponse"
+            }
+          }
+        }
+      }
+    },
+    "/risk/stop/rule/config": {
+      "post": {
+        "tags": ["risk"],
+        "summary": "自定义止损/止盈规则配置",
+        "description": "创建/更新单只股票的止损/止盈规则",
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/StopRuleConfigRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/BaseResponse"
+            }
+          }
+        }
+      }
+    },
+    "/tech/indicator/data": {
+      "get": {
+        "tags": ["techIndicator"],
+        "summary": "获取单只股票技术指标数据",
+        "description": "返回指定股票指定周期的经典技术指标（MA、MACD、RSI等）数据",
+        "parameters": [
+          {
+            "name": "stockCode",
+            "in": "query",
+            "required": true,
+            "type": "string",
+            "description": "股票代码"
+          },
+          {
+            "name": "cycleType",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "enum": ["day", "week", "month", "60min"],
+            "default": "day",
+            "description": "周期类型"
+          },
+          {
+            "name": "indicatorTypes",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "description": "指标类型（多个用逗号分隔，如 MA,MACD,RSI）"
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "default": 60,
+            "description": "统计天数"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/TechIndicatorDataResponse"
+            }
+          }
+        }
+      }
+    },
+    "/tech/kline/pattern/recognize": {
+      "get": {
+        "tags": ["techIndicator"],
+        "summary": "识别股票K线形态",
+        "description": "返回指定股票近期K线形态（头肩底、双底、杯柄等）识别结果",
+        "parameters": [
+          {
+            "name": "stockCode",
+            "in": "query",
+            "required": true,
+            "type": "string",
+            "description": "股票代码"
+          },
+          {
+            "name": "cycleType",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "enum": ["day", "week", "month"],
+            "default": "day",
+            "description": "周期类型"
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "default": 30,
+            "description": "统计天数"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/KlinePatternRecognizeResponse"
+            }
+          }
+        }
+      }
+    },
+    "/market/stock/basic": {
+      "get": {
+        "tags": ["market"],
+        "summary": "获取股票基本信息",
+        "description": "返回股票基本信息列表",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/StockBasicListResponse"
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "BaseResponse": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "example": 200
+        },
+        "msg": {
+          "type": "string",
+          "example": "success"
+        },
+        "requestId": {
+          "type": "string",
+          "example": "req-1234567890abcdef"
+        },
+        "timestamp": {
+          "type": "integer",
+          "example": 1735689600000
+        }
+      }
+    },
+    "ErrorResponse": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "example": 400
+        },
+        "msg": {
+          "type": "string",
+          "example": "参数无效/缺失"
+        },
+        "requestId": {
+          "type": "string",
+          "example": "req-1234567890abcdef"
+        },
+        "timestamp": {
+          "type": "integer",
+          "example": 1735689600000
+        }
+      }
+    },
+    "PaginationResponse": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "example": 100
+        },
+        "pageNum": {
+          "type": "integer",
+          "example": 1
+        },
+        "pageSize": {
+          "type": "integer",
+          "example": 20
+        },
+        "totalPages": {
+          "type": "integer",
+          "example": 5
+        }
+      }
+    },
+    "ChipDistributionResponse": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/BaseResponse"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "stockCode": {
+                  "type": "string",
+                  "example": "SH600000"
+                },
+                "stockName": {
+                  "type": "string",
+                  "example": "浦发银行"
+                },
+                "date": {
+                  "type": "string",
+                  "example": "2026-01-04"
+                },
+                "chipDistribution": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "price": {
+                        "type": "integer",
+                        "example": 850
+                      },
+                      "chipRatio": {
+                        "type": "number",
+                        "example": 0.05
+                      },
+                      "holderCount": {
+                        "type": "integer",
+                        "example": 12000
+                      }
+                    }
+                  }
+                },
+                "chipConcentration": {
+                  "type": "number",
+                  "example": 0.89
+                },
+                "mainCostPrice": {
+                  "type": "integer",
+                  "example": 820
+                },
+                "supportPrice": {
+                  "type": "integer",
+                  "example": 790
+                },
+                "resistancePrice": {
+                  "type": "integer",
+                  "example": 900
+                },
+                "chipPeakInfo": {
+                  "type": "object",
+                  "properties": {
+                    "peakPrice": {
+                      "type": "integer",
+                      "example": 830
+                    },
+                    "peakRatio": {
+                      "type": "number",
+                      "example": 0.65
+                    },
+                    "isSinglePeak": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "ChipTrendResponse": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/BaseResponse"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "stockCode": {
+                  "type": "string",
+                  "example": "SH600000"
+                },
+                "stockName": {
+                  "type": "string",
+                  "example": "浦发银行"
+                },
+                "trendData": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "date": {
+                        "type": "string",
+                        "example": "2026-01-04"
+                      },
+                      "chipConcentration": {
+                        "type": "number",
+                        "example": 0.89
+                      },
+                      "mainCostPrice": {
+                        "type": "integer",
+                        "example": 820
+                      },
+                      "supportPrice": {
+                        "type": "integer",
+                        "example": 790
+                      },
+                      "resistancePrice": {
+                        "type": "integer",
+                        "example": 900
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "OpinionSummaryResponse": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/BaseResponse"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "stockCode": {
+                  "type": "string",
+                  "example": "SH600000"
+                },
+                "stockName": {
+                  "type": "string",
+                  "example": "浦发银行"
+                },
+                "opinionScore": {
+                  "type": "integer",
+                  "example": 75
+                },
+                "positiveRatio": {
+                  "type": "number",
+                  "example": 0.6
+                },
+                "negativeRatio": {
+                  "type": "number",
+                  "example": 0.15
+                },
+                "neutralRatio": {
+                  "type": "number",
+                  "example": 0.25
+                },
+                "hotEvents": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "eventId": {
+                        "type": "string",
+                        "example": "event-123"
+                      },
+                      "eventTitle": {
+                        "type": "string",
+                        "example": "浦发银行发布2025年年度财报，净利润同比增长5%"
+                      },
+                      "eventTime": {
+                        "type": "string",
+                        "example": "2026-01-03 15:30:00"
+                      },
+                      "eventInfluence": {
+                        "type": "integer",
+                        "example": 80
+                      },
+                      "eventSentiment": {
+                        "type": "string",
+                        "enum": ["positive", "negative", "neutral"],
+                        "example": "positive"
+                      }
+                    }
+                  }
+                },
+                "opinionTrend": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "time": {
+                        "type": "string",
+                        "example": "2026-01-01"
+                      },
+                      "score": {
+                        "type": "integer",
+                        "example": 72
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "OpinionListResponse": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/BaseResponse"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "$ref": "#/definitions/PaginationResponse"
+            }
+          }
+        }
+      ]
+    },
+    "HeatFlowStockSeatResponse": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/BaseResponse"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "stockCode": {
+                  "type": "string",
+                  "example": "SH600000"
+                },
+                "stockName": {
+                  "type": "string",
+                  "example": "浦发银行"
+                },
+                "totalNetBuy": {
+                  "type": "integer",
+                  "example": 50000000
+                },
+                "hotSeatList": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "seatId": {
+                        "type": "string",
+                        "example": "seat-123"
+                      },
+                      "seatName": {
+                        "type": "string",
+                        "example": "XX证券上海溧阳路营业部"
+                      },
+                      "seatType": {
+                        "type": "string",
+                        "enum": ["hotMoney", "institution"],
+                        "example": "hotMoney"
+                      },
+                      "netBuy": {
+                        "type": "integer",
+                        "example": 20000000
+                      },
+                      "operationStyle": {
+                        "type": "string",
+                        "enum": ["shortTerm", "longTerm"],
+                        "example": "shortTerm"
+                      },
+                      "successRate": {
+                        "type": "number",
+                        "example": 0.65
+                      },
+                      "operationRecord": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "tradeDate": {
+                              "type": "string",
+                              "example": "2026-01-03"
+                            },
+                            "buyAmount": {
+                              "type": "integer",
+                              "example": 30000000
+                            },
+                            "sellAmount": {
+                              "type": "integer",
+                              "example": 10000000
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "HeatFlowAlertListResponse": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/BaseResponse"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "$ref": "#/definitions/PaginationResponse"
+            }
+          }
+        }
+      ]
+    },
+    "SeatRiskScanResponse": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/BaseResponse"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "scanTime": {
+                  "type": "string",
+                  "example": "2026-01-10T10:30:00Z",
+                  "description": "扫描时间"
+                },
+                "totalScanned": {
+                  "type": "integer",
+                  "example": 25,
+                  "description": "扫描的股票总数"
+                },
+                "highRiskCount": {
+                  "type": "integer",
+                  "example": 3,
+                  "description": "高风险股票数量"
+                },
+                "riskScanList": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "stockCode": {
+                        "type": "string",
+                        "example": "SH600000",
+                        "description": "股票代码"
+                      },
+                      "stockName": {
+                        "type": "string",
+                        "example": "浦发银行",
+                        "description": "股票名称"
+                      },
+                      "lasaTeamSeatCount": {
+                        "type": "integer",
+                        "example": 5,
+                        "description": "拉萨天团席位数量"
+                      },
+                      "riskLevel": {
+                        "type": "string",
+                        "enum": ["safe", "warning", "danger"],
+                        "example": "danger",
+                        "description": "风险等级"
+                      },
+                      "riskAdvice": {
+                        "type": "string",
+                        "example": "规避",
+                        "description": "风险建议"
+                      },
+                      "totalSeatCount": {
+                        "type": "integer",
+                        "example": 12,
+                        "description": "总席位数量"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "LargeOrderRealTimeResponse": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/BaseResponse"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "stockCode": {
+                  "type": "string",
+                  "example": "SH600000"
+                },
+                "stockName": {
+                  "type": "string",
+                  "example": "浦发银行"
+                },
+                "currentPrice": {
+                  "type": "integer",
+                  "example": 850
+                },
+                "totalLargeOrderAmount": {
+                  "type": "integer",
+                  "example": 100000000
+                },
+                "largeOrderNetInflow": {
+                  "type": "integer",
+                  "example": 30000000
+                },
+                "largeOrderRatio": {
+                  "type": "number",
+                  "example": 0.4
+                },
+                "realTimeLargeOrders": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "tradeTime": {
+                        "type": "string",
+                        "example": "2026-01-04 15:00:00"
+                      },
+                      "tradePrice": {
+                        "type": "integer",
+                        "example": 850
+                      },
+                      "tradeVolume": {
+                        "type": "integer",
+                        "example": 10000
+                      },
+                      "tradeAmount": {
+                        "type": "integer",
+                        "example": 8500000
+                      },
+                      "tradeDirection": {
+                        "type": "string",
+                        "enum": ["buy", "sell"],
+                        "example": "buy"
+                      }
+                    }
+                  }
+                },
+                "abnormalSignal": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "signalType": {
+                        "type": "string",
+                        "example": "continuousNetInflow"
+                      },
+                      "signalTime": {
+                        "type": "string",
+                        "example": "2026-01-04 14:30:00"
+                      },
+                      "signalDesc": {
+                        "type": "string",
+                        "example": "连续3笔大单净流入，异动强度高"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "LargeOrderTrendResponse": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/BaseResponse"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "stockCode": {
+                  "type": "string",
+                  "example": "SH600000"
+                },
+                "stockName": {
+                  "type": "string",
+                  "example": "浦发银行"
+                },
+                "timeType": {
+                  "type": "string",
+                  "enum": ["minute", "day"],
+                  "example": "day"
+                },
+                "trendData": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "time": {
+                        "type": "string",
+                        "example": "2026-01-04"
+                      },
+                      "netInflow": {
+                        "type": "integer",
+                        "example": 5000000
+                      },
+                      "totalAmount": {
+                        "type": "integer",
+                        "example": 20000000
+                      },
+                      "ratio": {
+                        "type": "number",
+                        "example": 0.35
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "RiskAccountAssessmentResponse": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/BaseResponse"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "accountId": {
+                  "type": "string",
+                  "example": "acc-123456"
+                },
+                "totalMarketValue": {
+                  "type": "integer",
+                  "example": 10000000
+                },
+                "totalAvailableFunds": {
+                  "type": "integer",
+                  "example": 2000000
+                },
+                "varValue": {
+                  "type": "integer",
+                  "example": 50000
+                },
+                "cvarValue": {
+                  "type": "integer",
+                  "example": 80000
+                },
+                "sharpRatio": {
+                  "type": "number",
+                  "example": 1.2
+                },
+                "maxDrawdown": {
+                  "type": "number",
+                  "example": 0.08
+                },
+                "positionRiskList": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "stockCode": {
+                        "type": "string",
+                        "example": "SH600000"
+                      },
+                      "stockName": {
+                        "type": "string",
+                        "example": "浦发银行"
+                      },
+                      "positionRatio": {
+                        "type": "number",
+                        "example": 0.3
+                      },
+                      "riskLevel": {
+                        "type": "string",
+                        "enum": ["low", "medium", "high"],
+                        "example": "medium"
+                      },
+                      "stopLossPrice": {
+                        "type": "integer",
+                        "example": 780
+                      },
+                      "stopProfitPrice": {
+                        "type": "integer",
+                        "example": 950
+                      }
+                    }
+                  }
+                },
+                "riskWarning": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "example": "单票持仓超限"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "StopRuleConfigRequest": {
+      "type": "object",
+      "properties": {
+        "stockCode": {
+          "type": "string",
+          "example": "SH600000"
+        },
+        "stopType": {
+          "type": "string",
+          "enum": ["stopLoss", "stopProfit"],
+          "example": "stopLoss"
+        },
+        "ruleType": {
+          "type": "string",
+          "enum": ["fixed", "moving", "ma"],
+          "example": "fixed"
+        },
+        "value": {
+          "type": "number",
+          "example": 0.05
+        },
+        "isEnabled": {
+          "type": "boolean",
+          "example": true
+        }
+      },
+      "required": ["stockCode", "stopType", "ruleType", "value", "isEnabled"]
+    },
+    "TechIndicatorDataResponse": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/BaseResponse"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "stockCode": {
+                  "type": "string",
+                  "example": "SH600000"
+                },
+                "stockName": {
+                  "type": "string",
+                  "example": "浦发银行"
+                },
+                "cycleType": {
+                  "type": "string",
+                  "enum": ["day", "week", "month", "60min"],
+                  "example": "day"
+                },
+                "indicatorDataList": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "time": {
+                        "type": "string",
+                        "example": "2026-01-04"
+                      },
+                      "openPrice": {
+                        "type": "integer",
+                        "example": 830
+                      },
+                      "closePrice": {
+                        "type": "integer",
+                        "example": 850
+                      },
+                      "highPrice": {
+                        "type": "integer",
+                        "example": 860
+                      },
+                      "lowPrice": {
+                        "type": "integer",
+                        "example": 820
+                      },
+                      "volume": {
+                        "type": "integer",
+                        "example": 1000000
+                      },
+                      "ma": {
+                        "type": "object",
+                        "properties": {
+                          "ma5": {
+                            "type": "integer",
+                            "example": 840
+                          },
+                          "ma10": {
+                            "type": "integer",
+                            "example": 830
+                          },
+                          "ma20": {
+                            "type": "integer",
+                            "example": 820
+                          }
+                        }
+                      },
+                      "macd": {
+                        "type": "object",
+                        "properties": {
+                          "diff": {
+                            "type": "number",
+                            "example": 5.2
+                          },
+                          "dea": {
+                            "type": "number",
+                            "example": 4.8
+                          },
+                          "bar": {
+                            "type": "number",
+                            "example": 0.8
+                          }
+                        }
+                      },
+                      "rsi": {
+                        "type": "object",
+                        "properties": {
+                          "rsi6": {
+                            "type": "number",
+                            "example": 65
+                          },
+                          "rsi12": {
+                            "type": "number",
+                            "example": 58
+                          },
+                          "rsi24": {
+                            "type": "number",
+                            "example": 52
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "KlinePatternRecognizeResponse": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/BaseResponse"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "stockCode": {
+                  "type": "string",
+                  "example": "SH600000"
+                },
+                "stockName": {
+                  "type": "string",
+                  "example": "浦发银行"
+                },
+                "cycleType": {
+                  "type": "string",
+                  "enum": ["day", "week", "month"],
+                  "example": "day"
+                },
+                "patternList": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "patternName": {
+                        "type": "string",
+                        "example": "头肩底"
+                      },
+                      "startDate": {
+                        "type": "string",
+                        "example": "2026-01-01"
+                      },
+                      "endDate": {
+                        "type": "string",
+                        "example": "2026-01-04"
+                      },
+                      "strength": {
+                        "type": "number",
+                        "example": 0.85
+                      },
+                      "trendPrediction": {
+                        "type": "string",
+                        "example": "上涨"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "StockBasicListResponse": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/BaseResponse"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "ts_code": {
+                    "type": "string",
+                    "example": "SH600000"
+                  },
+                  "symbol": {
+                    "type": "string",
+                    "example": "600000"
+                  },
+                  "name": {
+                    "type": "string",
+                    "example": "浦发银行"
+                  },
+                  "industry": {
+                    "type": "string",
+                    "example": "银行"
+                  },
+                  "market": {
+                    "type": "string",
+                    "example": "SH"
+                  },
+                  "pinyin": {
+                    "type": "string",
+                    "example": "pfyh"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "externalDocs": {
+    "description": "更多信息",
+    "url": "http://docs.ai-trading-terminal.com"
+  }
+}
