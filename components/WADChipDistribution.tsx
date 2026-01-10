@@ -5,6 +5,8 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { fetchChipDistribution, ChipDistributionData as ApiChipDistributionData } from '../lib/api/chip/distribution';
 import { fetchTechIndicatorData, TechIndicatorParams } from '../lib/api/techIndicator/indicator';
 import { fetchLargeOrderRealTime } from '../lib/api/largeOrder/realTime';
+import { calculateChipConcentration, calculateEnhancedChipDistribution, ChipDistributionItem, EnhancedChipDistributionResult } from '../lib/algorithms/chipDistribution';
+import { calculateIntradayStrength, IntradayStrengthParams } from '../lib/algorithms/intradayStrength';
 
 // 防抖函数
 const debounce = <T extends (...args: any[]) => any>(func: T, delay: number): ((...args: Parameters<T>) => void) => {
@@ -120,13 +122,33 @@ export default function WADChipDistribution({ symbol = 'SH600000' }: { symbol?: 
     } catch (error) {
       console.error('Error fetching WAD chip distribution data:', error);
       // 发生错误时使用模拟数据作为降级方案
-      const mockChipData = generateMockChipDistribution();
-      const mockWadData = generateMockWADData();
+      // 生成更真实的模拟价格数据
+      const mockPriceData = generateTestPriceData(30);
       
-      // 计算模拟的支撑位和压力位
-      const averageCost = calculateAverageCost(mockChipData);
-      const mockSupportPrice = averageCost * 0.95;
-      const mockResistancePrice = averageCost * 1.05;
+      // 使用高精度算法计算增强筹码分布
+      const enhancedChipResult = calculateEnhancedChipDistribution(mockPriceData);
+      
+      // 转换为组件需要的数据格式
+      const mockChipData = enhancedChipResult.chipDistribution.map(chip => ({
+        price: chip.price,
+        volume: chip.volume,
+        percentage: chip.percentage
+      }));
+      
+      // 使用增强的筹码集中度计算
+      const concentrationResult = calculateChipConcentration({
+        chipData: enhancedChipResult.chipDistribution as ChipDistributionItem[],
+        currentPrice: mockPriceData[mockPriceData.length - 1].close
+      });
+      
+      const mockWadData = enhancedChipResult.wadData.map(wadItem => ({
+        timestamp: wadItem.timestamp,
+        wad: wadItem.weightedWad
+      }));
+      
+      // 使用算法计算的支撑位和压力位
+      const mockSupportPrice = enhancedChipResult.enhancedSupportResistance.strongestSupport?.price || 0;
+      const mockResistancePrice = enhancedChipResult.enhancedSupportResistance.strongestResistance?.price || 0;
       
       setChipData(mockChipData);
       setWadData(mockWadData);
@@ -578,36 +600,73 @@ function generateMockWADData(): WADIndicatorData[] {
   return data;
 }
 
-// 计算平均成本
-function calculateAverageCost(data: ChipDistributionData[]): number {
-  if (data.length === 0) return 0;
-  const total = data.reduce((acc, item) => acc + (item.price * item.volume), 0);
-  const totalVolume = data.reduce((acc, item) => acc + item.volume, 0);
-  return total / totalVolume;
+// 生成测试价格数据
+function generateTestPriceData(count: number): Array<{ timestamp: number; high: number; low: number; close: number; volume: number }> {
+  const data: Array<{ timestamp: number; high: number; low: number; close: number; volume: number }> = [];
+  let currentPrice = 100;
+  const currentTime = Date.now();
+  
+  for (let i = 0; i < count; i++) {
+    const volatility = Math.random() * 2;
+    const change = (Math.random() - 0.5) * volatility;
+    const newPrice = currentPrice + change;
+    const high = Math.max(newPrice, newPrice + Math.random() * 0.5);
+    const low = Math.min(newPrice, newPrice - Math.random() * 0.5);
+    const volume = Math.floor(Math.random() * 1000000) + 100000;
+    
+    data.push({
+      timestamp: currentTime - (count - i) * 60000, // 每分钟一个数据点
+      high: Math.round(high * 100) / 100,
+      low: Math.round(low * 100) / 100,
+      close: Math.round(newPrice * 100) / 100,
+      volume
+    });
+    
+    currentPrice = newPrice;
+  }
+  
+  return data;
 }
 
-// 计算筹码集中度（前20%价格区间的筹码占比）
+// 使用高精度算法计算平均成本
+function calculateAverageCost(data: ChipDistributionData[]): number {
+  if (data.length === 0) return 0;
+  
+  // 使用chipDistribution.ts中的算法
+  const chipItems = data.map(item => ({
+    price: item.price,
+    volume: item.volume,
+    percentage: item.percentage
+  }));
+  
+  let totalValue = 0;
+  let totalVolume = 0;
+  
+  for (const item of chipItems) {
+    totalValue += item.price * item.volume;
+    totalVolume += item.volume;
+  }
+  
+  return totalVolume > 0 ? totalValue / totalVolume : 0;
+}
+
+// 使用高精度算法计算筹码集中度
 function calculateConcentration(data: ChipDistributionData[]): number {
   if (data.length === 0) return 0;
   
-  // 按价格排序
-  const sortedData = [...data].sort((a, b) => a.price - b.price);
+  // 使用chipDistribution.ts中的算法
+  const chipItems = data.map(item => ({
+    price: item.price,
+    volume: item.volume,
+    percentage: item.percentage
+  }));
   
-  // 计算总筹码
-  const totalVolume = sortedData.reduce((acc, item) => acc + item.volume, 0);
-  
-  // 计算前20%价格区间的筹码占比
-  const targetRange = totalVolume * 0.2;
-  let accumulatedVolume = 0;
-  let concentration = 0;
-  
-  for (const item of sortedData) {
-    accumulatedVolume += item.volume;
-    concentration += item.percentage;
-    if (accumulatedVolume >= targetRange) {
-      break;
-    }
+  // 使用HHI指数计算集中度
+  let hhi = 0.0;
+  for (const item of chipItems) {
+    const percentage = parseFloat(item.percentage.toFixed(10)); // 提高精度
+    hhi += percentage * percentage;
   }
   
-  return concentration;
+  return hhi;
 }

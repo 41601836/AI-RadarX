@@ -18,7 +18,7 @@ export interface MockDataGenerator<T> {
 }
 
 // 基础API URL
-export const BASE_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
+export const BASE_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api'; // 使用Next.js默认的API路径
 
 // 获取认证Token
 export function getAuthToken(): string | null {

@@ -21,6 +21,11 @@ export interface DataHealthStatus {
     lastCheckTime: number;
     error?: string;
   };
+  aiEngine?: {
+    connected: boolean;
+    lastCheckTime: number;
+    error?: string;
+  };
   currentDataSource: DataSourceType;
 }
 
@@ -41,6 +46,11 @@ export default function DataHealth({ currentDataSource: externalDataSource }: Da
       connected: false,
       lastCheckTime: 0,
       error: '正在检查连接...'
+    },
+    aiEngine: {
+      connected: false,
+      lastCheckTime: 0,
+      error: '正在检查AI引擎...'
     },
     currentDataSource: 'Mock'
   });
@@ -63,6 +73,9 @@ export default function DataHealth({ currentDataSource: externalDataSource }: Da
       // 检查免费行情接口连接（模拟实现）
       const freeScannerStatus = await checkFreeScannerConnection();
       
+      // 检查AI引擎连接
+      const aiEngineStatus = await checkAIEngineConnection();
+      
       // 确定当前数据源类型
       let dataSource: DataSourceType = 'Mock';
       
@@ -84,6 +97,7 @@ export default function DataHealth({ currentDataSource: externalDataSource }: Da
       setStatus({
         tushare: tushareStatus,
         freeScanner: freeScannerStatus,
+        aiEngine: aiEngineStatus,
         currentDataSource: dataSource
       });
     } catch (error) {
@@ -100,6 +114,12 @@ export default function DataHealth({ currentDataSource: externalDataSource }: Da
           connected: false,
           lastCheckTime: Date.now(),
           error: '检查连接失败'
+        },
+        aiEngine: {
+          ...prev.aiEngine!,
+          connected: false,
+          lastCheckTime: Date.now(),
+          error: 'AI引擎检查失败'
         },
         currentDataSource: externalDataSource || 'Mock'
       }));
@@ -126,6 +146,33 @@ export default function DataHealth({ currentDataSource: externalDataSource }: Da
         connected: false,
         lastCheckTime: Date.now(),
         error: '免费行情接口连接失败'
+      };
+    }
+  };
+
+  // 检查AI引擎连接
+  const checkAIEngineConnection = async (): Promise<DataHealthStatus['aiEngine']> => {
+    try {
+      // 尝试连接到AI引擎接口进行健康检查
+      const response = await fetch('/api/ai-inference/intelligence-brief?stockCode=SH600000', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      // 检查AI引擎是否正常响应
+      const isMock = process.env.NEXT_PUBLIC_API_MOCK === 'true';
+      
+      return {
+        connected: isMock || response.ok, // 在非Mock模式下，根据响应状态判断
+        lastCheckTime: Date.now()
+      };
+    } catch (error) {
+      return {
+        connected: false,
+        lastCheckTime: Date.now(),
+        error: 'AI引擎连接失败'
       };
     }
   };
@@ -202,6 +249,16 @@ export default function DataHealth({ currentDataSource: externalDataSource }: Da
     return getDataSourceText(dataSource);
   };
 
+  // 获取AI引擎状态图标
+  const getAIEngineStatusIcon = () => {
+    return status.aiEngine?.connected ? '🤖' : '⚠️';
+  };
+
+  // 获取AI引擎状态颜色
+  const getAIEngineStatusColor = () => {
+    return status.aiEngine?.connected ? 'text-green-500' : 'text-yellow-500';
+  };
+
   return (
     <div className="data-health">
       <div 
@@ -212,6 +269,17 @@ export default function DataHealth({ currentDataSource: externalDataSource }: Da
       </div>
       <span className={`status-text ${getOverallStatusColor()}`}>
         {getOverallStatusText()}
+      </span>
+
+      {/* AI引擎状态指示器 */}
+      <div 
+        className={`status-indicator ai-engine ${getAIEngineStatusColor()}`} 
+        title={`AI引擎: ${status.aiEngine?.connected ? '正常' : '异常'}`}
+      >
+        {getAIEngineStatusIcon()}
+      </div>
+      <span className={`status-text ai-engine ${getAIEngineStatusColor()}`}>
+        {status.aiEngine?.connected ? 'AI引擎在线' : 'AI引擎离线'}
       </span>
 
       <style jsx>{`
@@ -233,6 +301,12 @@ export default function DataHealth({ currentDataSource: externalDataSource }: Da
 
         .status-text {
           font-weight: 500;
+        }
+
+        .ai-engine {
+          margin-left: 12px;
+          padding-left: 12px;
+          border-left: 1px solid #444;
         }
       `}</style>
     </div>

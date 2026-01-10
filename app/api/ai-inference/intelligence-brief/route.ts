@@ -4,6 +4,7 @@ import { IntelligenceBriefData } from '../../../../components/IntelligenceBrief'
 import { successResponse } from '../../../../lib/api/common/response';
 import { errorResponse, badRequestError, internalServerError } from '../../../../lib/api/common/errors';
 import { apiHandler } from '../../../../lib/api/common/handler';
+import { getTushareStockBasic } from '../../../../lib/api/common/tushare';
 
 // 生成情报简报数据
 async function generateIntelligenceBrief(stockCode: string): Promise<IntelligenceBriefData> {
@@ -11,17 +12,20 @@ async function generateIntelligenceBrief(stockCode: string): Promise<Intelligenc
     // 获取聚合数据
     const aggregatedData = await getAggregatedStockData(stockCode);
     
+    // 从Tushare获取真实的股票基本信息
+    const stockBasic = await getTushareStockBasic(stockCode);
+    
     // 基于聚合数据生成情报简报
     return {
       stock: {
         ts_code: aggregatedData.stockCode,
         symbol: aggregatedData.stockCode.slice(2),
         name: aggregatedData.stockName,
-        industry: '银行', // 默认值，实际应从Tushare获取
-        area: '上海', // 默认值，实际应从Tushare获取
-        market: '主板', // 默认值，实际应从Tushare获取
-        list_date: '1999-11-10', // 默认值，实际应从Tushare获取
-        pinyin: 'pfyh' // 默认值，实际应从Tushare获取
+        industry: stockBasic?.industry || '银行', // 从Tushare获取，如失败使用默认值
+        area: stockBasic?.area || '上海', // 从Tushare获取，如失败使用默认值
+        market: stockBasic?.market || '主板', // 从Tushare获取，如失败使用默认值
+        list_date: stockBasic?.list_date || '1999-11-10', // 从Tushare获取，如失败使用默认值
+        pinyin: stockBasic?.pinyin || 'pfyh' // 从Tushare获取，如失败使用默认值
       },
       selectionLogic: {
         overallScore: Math.round((aggregatedData.chipData.chipConcentrationScore + aggregatedData.sentimentData.opinionScore + aggregatedData.heatFlowData.heatScore) / 3),

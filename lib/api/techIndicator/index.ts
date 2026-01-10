@@ -1,3 +1,4 @@
-// 技术分析模块API接口
-export * from './indicator';
-export * from './klinePattern';
+// techIndicator API模块索引
+
+export * from './techindicatordata';
+export * from './techklinepatternrecognize';

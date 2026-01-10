@@ -15,6 +15,14 @@ interface AIAnalysisCache {
 const aiAnalysisCache: Map<string, AIAnalysisCache> = new Map();
 const CACHE_DURATION = 3 * 60 * 1000; // 3分钟缓存
 
+// 全市场情绪接口
+interface MarketSentiment {
+  sentimentScore: number; // 全市场情绪评分(0-100)
+  sentimentLevel: 'ice' | 'cold' | 'neutral' | 'hot' | 'boiling'; // 情绪等级：冰点、寒冷、中性、火热、沸点
+  advanceDeclineRatio: number; // 涨跌停比
+  volumeForecast: number; // 成交量预估
+}
+
 // 聚合数据接口
 export interface AggregatedStockData {
   stockCode: string;
@@ -36,6 +44,7 @@ export interface AggregatedStockData {
     hotSeatsCount: number; // 活跃游资席位数量
     heatScore: number; // 游资热度评分(0-100)
   };
+  marketSentiment: MarketSentiment; // 全市场情绪数据
 }
 
 // AI分析结果接口
@@ -73,6 +82,9 @@ export async function getAggregatedStockData(stockCode: string): Promise<Aggrega
     // 计算游资热度评分 (0-100)
     const heatScore = calculateHeatFlowScore(heatFlowData.data);
 
+    // 模拟计算全市场情绪数据
+    const marketSentiment = calculateMarketSentiment();
+
     return {
       stockCode,
       stockName: chipData.data.stockName,
@@ -92,7 +104,8 @@ export async function getAggregatedStockData(stockCode: string): Promise<Aggrega
         hotMoneyNetBuy: heatFlowData.data.totalNetBuy,
         hotSeatsCount: heatFlowData.data.hotSeatList.length,
         heatScore
-      }
+      },
+      marketSentiment
     };
   } catch (error) {
     console.error('聚合数据失败:', error);
@@ -141,80 +154,45 @@ export async function getAISmartAnalysis(stockCode: string): Promise<AIAnalysisR
  */
 async function callAIModel(data: AggregatedStockData): Promise<AIAnalysisResult> {
   // TODO: 集成真实的大模型接口（DeepSeek/GPT等）
-  // 目前实现新的推理逻辑
+  // 使用静态Mock数据，减少计算开销
   
-  // 计算平均成本线（这里使用筹码支撑位和压力位的平均值作为示例）
+  // 计算平均成本线（简化计算）
   const averageCostLine = (data.chipData.supportPrice + data.chipData.resistancePrice) / 2;
   
-  // 交叉验证逻辑：入场看舆情、持仓看流动性、离场看抛压与筹码
-  const entryValidation = data.sentimentData.opinionScore > 70 && data.sentimentData.positiveRatio > 0.6;
-  const holdValidation = data.heatFlowData.heatScore > 50 && data.heatFlowData.hotMoneyNetBuy > 0;
-  const exitValidation = data.currentPrice > data.chipData.resistancePrice * 1.1 || 
-                         data.heatFlowData.hotMoneyNetBuy < -10000000;
-  
-  // 操作评级决策
+  // 简化的操作评级决策
   let operationRating: 'buy' | 'hold' | 'sell' = 'hold';
-  let trendAnalysis = '';
-  let mainIntention = '';
-  let riskWarning: string[] = [];
-  
-  // 基于交叉验证结果制定策略
-  if (entryValidation && holdValidation && !exitValidation) {
-    operationRating = 'buy';
-    trendAnalysis = `${data.stockName}(${data.stockCode})当前趋势强劲，入场条件已满足。`;
-    mainIntention = '主力资金持续流入，游资活跃度高，拉升意图明确。';
-  } else if (holdValidation && !exitValidation) {
-    operationRating = 'hold';
-    trendAnalysis = `${data.stockName}(${data.stockCode})当前处于震荡整理阶段，持仓条件保持。`;
-    mainIntention = '主力资金保持稳定，股价在合理区间内运行。';
-  } else {
-    operationRating = 'sell';
-    trendAnalysis = `${data.stockName}(${data.stockCode})当前已达到离场条件，需及时止盈/止损。`;
-    mainIntention = '主力资金开始流出，抛压明显，需警惕风险。';
-  }
-  
-  // 止损/止盈建议（硬性执行语气）
-  const stopLossPrice = averageCostLine * 0.9;
-  const stopProfitPrice = averageCostLine * 1.2;
-  
-  if (operationRating === 'buy') {
-    riskWarning.push(`【硬性执行】买入后严格执行止损：当股价跌破平均成本线(${averageCostLine}分)的90%即${stopLossPrice.toFixed(0)}分时，必须立即止损！`);
-    riskWarning.push(`【硬性执行】设置止盈：当股价涨至平均成本线(${averageCostLine}分)的120%即${stopProfitPrice.toFixed(0)}分时，建议止盈离场！`);
-  } else if (operationRating === 'hold') {
-    riskWarning.push(`【硬性执行】持仓期间严格监控：当股价跌破平均成本线(${averageCostLine}分)的90%即${stopLossPrice.toFixed(0)}分时，必须立即止损！`);
-    riskWarning.push(`【硬性执行】当股价涨至平均成本线(${averageCostLine}分)的120%即${stopProfitPrice.toFixed(0)}分时，建议止盈离场！`);
-  } else {
-    riskWarning.push(`【硬性执行】立即执行离场操作：当前股价已达到离场条件，必须严格执行卖出指令！`);
-    riskWarning.push(`【硬性执行】参考价格：平均成本线(${averageCostLine}分)，当前股价(${data.currentPrice}分)。`);
-  }
-  
-  // 基于交叉验证的额外风险提示
-  if (!entryValidation) {
-    riskWarning.push('舆情评分不足，入场需谨慎！');
-  }
-  if (!holdValidation) {
-    riskWarning.push('流动性不足，持仓风险较大！');
-  }
-  if (exitValidation) {
-    riskWarning.push('抛压明显，筹码松动，建议立即离场！');
-  }
-  
-  // 置信度计算（基于交叉验证结果）
   let confidenceScore = 70;
-  if (entryValidation && holdValidation && !exitValidation) {
-    confidenceScore = 90;
-  } else if (!exitValidation) {
-    confidenceScore = 75;
-  } else {
-    confidenceScore = 85; // 离场信号置信度较高
+  
+  // 基于简单条件的决策
+  if (data.sentimentData.opinionScore > 75 && data.heatFlowData.hotMoneyNetBuy > 0) {
+    operationRating = 'buy';
+    confidenceScore = 85;
+  } else if (data.heatFlowData.hotMoneyNetBuy < -5000000) {
+    operationRating = 'sell';
+    confidenceScore = 80;
   }
   
+  // 市场情绪分析
+  const marketSentiment = data.marketSentiment;
+  const marketSentimentAnalysis = {
+    'ice': '全市场情绪处于冰点，风险较大。',
+    'cold': '全市场情绪偏冷，谨慎操作。',
+    'hot': '全市场情绪火热，机会较多。',
+    'boiling': '全市场情绪沸腾，风险累积。',
+    'neutral': '全市场情绪中性，均衡配置。'
+  }[marketSentiment.sentimentLevel];
+  
+  // 生成静态的分析结果
   return {
-    trendAnalysis,
-    mainIntention,
+    trendAnalysis: `${data.stockName}(${data.stockCode})当前市场情绪${marketSentimentAnalysis}`,
+    mainIntention: '主力资金活跃度适中，股价在合理区间内运行。',
     operationRating,
     confidenceScore,
-    riskWarning: riskWarning.filter(Boolean)
+    riskWarning: [
+      `【市场情绪分析】${marketSentimentAnalysis}`,
+      '【操作建议】根据个人风险偏好制定交易策略',
+      `【参考价格】平均成本线(${averageCostLine.toFixed(0)}分)`
+    ]
   };
 }
 
@@ -226,6 +204,42 @@ async function callAIModel(data: AggregatedStockData): Promise<AIAnalysisResult>
 function calculateChipConcentrationScore(concentration: number): number {
   // 筹码越集中分数越高 (0-1转0-100)
   return Math.round(concentration * 100);
+}
+
+/**
+ * 计算全市场情绪数据
+ * @returns 全市场情绪数据
+ */
+function calculateMarketSentiment(): MarketSentiment {
+  // 随机生成情绪评分 (0-100)
+  const sentimentScore = Math.round(Math.random() * 100);
+  
+  // 根据情绪评分确定情绪等级
+  let sentimentLevel: 'ice' | 'cold' | 'neutral' | 'hot' | 'boiling' = 'neutral';
+  if (sentimentScore < 20) {
+    sentimentLevel = 'ice';
+  } else if (sentimentScore < 40) {
+    sentimentLevel = 'cold';
+  } else if (sentimentScore < 70) {
+    sentimentLevel = 'neutral';
+  } else if (sentimentScore < 90) {
+    sentimentLevel = 'hot';
+  } else {
+    sentimentLevel = 'boiling';
+  }
+  
+  // 随机生成涨跌停比 (0-5)
+  const advanceDeclineRatio = parseFloat((Math.random() * 5).toFixed(1));
+  
+  // 随机生成成交量预估 (5000-15000亿)
+  const volumeForecast = Math.round(5000 + Math.random() * 10000);
+  
+  return {
+    sentimentScore,
+    sentimentLevel,
+    advanceDeclineRatio,
+    volumeForecast
+  };
 }
 
 /**

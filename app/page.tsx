@@ -87,13 +87,10 @@ const Home: React.FC = () => {
 
       <style jsx>{`
         .dashboard {
-          height: 100vh;
-          display: flex;
-          flex-direction: column;
+          @apply h-screen overflow-hidden flex flex-col;
           background: #11111b;
           color: #ffffff;
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-          overflow: hidden;
         }
 
         /* 顶部导航栏 */
@@ -105,6 +102,8 @@ const Home: React.FC = () => {
           background: #1e1e2e;
           border-bottom: 1px solid #313244;
           gap: 24px;
+          z-index: 10;
+          position: relative;
         }
 
         .logo h1 {

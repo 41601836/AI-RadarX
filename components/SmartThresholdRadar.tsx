@@ -1,406 +1,357 @@
-// 智能阈值雷达图组件
+// 智能阈值雷达图组件（集成分时强度算法）
 'use client';
 
-import React, { useEffect, useState, useRef } from 'react';
-import { NotificationContext } from './NotificationCenter';
-
-// 全局变量：记录本次会话中已报警的指标
-const hasAlertedThisSession = new Set();
-
-// 雷达图维度类型
-export type RadarDimension = 
-  | 'turnover'       // 成交额（亿）
-  | 'explosionRate'  // 炸板率（%）
-  | 'profitTaking'   // 获利盘（%）
-  | 'lhasaRatio'     // 拉萨天团占比（%）
-  | 'volumeRatio'    // 量比
-  | 'amplitude';     // 振幅（%）;
+import React, { useEffect, useState } from 'react';
+import { calculateEnhancedIntradayAnalysis, calculateIntradayStrength, calculateAbsorptionStrength } from '../lib/algorithms/intradayStrength';
 
 // 雷达图数据接口
 export interface RadarData {
   [key: string]: number;
-  turnover: number;       // 成交额（亿）
-  explosionRate: number;  // 炸板率（%）
-  profitTaking: number;   // 获利盘（%）
-  lhasaRatio: number;     // 拉萨天团占比（%）
-  volumeRatio: number;    // 量比
-  amplitude: number;      // 振幅（%）
 }
 
-// 雷达图维度配置
-export interface RadarDimensionConfig {
-  key: RadarDimension;
-  label: string;
-  unit: string;
-  max: number;
-  min: number;
-  threshold: number | { min: number; max: number };
-  alertType?: string;
-  isCritical?: boolean;
-}
-
-// 雷达图配置接口
-export interface RadarConfig {
-  dimensions: RadarDimensionConfig[];
-}
-
-// 警报类型
-export const ALERT_TYPES = {
-  LIQUIDITY_ALARM: 'LIQUIDITY_ALARM',
-  SENTIMENT_CRITICAL: 'SENTIMENT_CRITICAL',
-  CHIP_DANGER: 'CHIP_DANGER',
-  RETAIL_STAMPEDE: 'RETAIL_STAMPEDE'
-};
-
-interface SmartThresholdRadarProps {
-  data: RadarData;
-  config?: RadarConfig;
-}
-
-export default function SmartThresholdRadar({
-  data,
-  config
-}: SmartThresholdRadarProps) {
-  const notificationCenter = React.useContext(NotificationContext);
-  const [dimensions, setDimensions] = useState<RadarDimensionConfig[]>([]);
-  const [alerts, setAlerts] = useState<string[]>([]);
-  const lastNotifiedLevels = useRef<Map<string, boolean>>(new Map());
-
-  // 默认雷达图配置
-  const defaultConfig: RadarConfig = {
-    dimensions: [
-      {
-        key: 'turnover',
-        label: '成交额',
-        unit: '亿',
-        max: 20000,
-        min: 0,
-        threshold: 7000, // < 7000亿触发警报
-        alertType: ALERT_TYPES.LIQUIDITY_ALARM,
-        isCritical: true
-      },
-      {
-        key: 'explosionRate',
-        label: '炸板率',
-        unit: '%',
-        max: 100,
-        min: 0,
-        threshold: 50, // > 50%触发警报
-        alertType: ALERT_TYPES.SENTIMENT_CRITICAL,
-        isCritical: true
-      },
-      {
-        key: 'profitTaking',
-        label: '获利盘',
-        unit: '%',
-        max: 100,
-        min: 0,
-        threshold: { min: 20, max: 90 }, // <20% 或 >90%触发警报
-        alertType: ALERT_TYPES.CHIP_DANGER,
-        isCritical: true
-      },
-      {
-        key: 'lhasaRatio',
-        label: '拉萨天团占比',
-        unit: '%',
-        max: 100,
-        min: 0,
-        threshold: 30, // > 30%触发警报
-        alertType: ALERT_TYPES.RETAIL_STAMPEDE,
-        isCritical: true
-      },
-      {
-        key: 'volumeRatio',
-        label: '量比',
-        unit: '',
-        max: 10,
-        min: 0,
-        threshold: 5
-      },
-      {
-        key: 'amplitude',
-        label: '振幅',
-        unit: '%',
-        max: 30,
-        min: 0,
-        threshold: 15
+const SmartThresholdRadar: React.FC<{ stockCode?: string }> = ({ stockCode = 'SH600000' }) => {
+  // 生成测试数据
+  const generateTestData = () => {
+    const priceData = [];
+    const orderData = [];
+    const now = Date.now();
+    let currentPrice = 100;
+    
+    // 生成30分钟的价格数据
+    for (let i = 0; i < 30; i++) {
+      const timestamp = now - i * 60000;
+      const change = (Math.random() - 0.5) * 2;
+      const newPrice = currentPrice + change;
+      
+      priceData.push({
+        timestamp,
+        high: newPrice + Math.random() * 0.5,
+        low: newPrice - Math.random() * 0.5,
+        close: newPrice,
+        volume: Math.floor(Math.random() * 1000000) + 100000
+      });
+      
+      // 生成一些订单数据
+      for (let j = 0; j < 5; j++) {
+        orderData.push({
+          tradeTime: new Date(timestamp).toISOString(),
+          tradePrice: newPrice + (Math.random() - 0.5) * 0.5,
+          tradeVolume: Math.floor(Math.random() * 10000) + 1000,
+          tradeDirection: Math.random() > 0.5 ? 'buy' : 'sell'
+        });
       }
-    ]
+      
+      currentPrice = newPrice;
+    }
+    
+    return { priceData, orderData };
   };
-
-  // 合并配置
-  const radarConfig = config || defaultConfig;
-
-  // 检查阈值并生成警报
+  
+  const [radarData, setRadarData] = useState<RadarData>({});
+  
   useEffect(() => {
-    const newAlerts: string[] = [];
-    const updatedDimensions = [...radarConfig.dimensions];
-
-    updatedDimensions.forEach((dim, index) => {
-      const value = data[dim.key];
-      let isAlert = false;
-
-      // 检查阈值条件
-      if (typeof dim.threshold === 'number') {
-        if (dim.key === 'turnover') {
-          // 成交额 < 7000亿触发警报
-          isAlert = value < dim.threshold;
-        } else {
-          // 其他维度：值 > 阈值触发警报
-          isAlert = value > dim.threshold;
-        }
-      } else {
-        // 范围阈值：< min 或 > max 触发警报
-        isAlert = value < dim.threshold.min || value > dim.threshold.max;
-      }
-
-      // 获取之前的警报状态
-      const wasAlert = lastNotifiedLevels.current.get(dim.key) || false;
-      
-      // 只有当风险等级从非警报变为警报时，才发送通知，且本次会话中未报警过
-      if (isAlert && dim.alertType && !wasAlert && !hasAlertedThisSession.has(dim.key)) {
-        newAlerts.push(dim.alertType);
-        // 将该指标添加到已报警集合中
-        hasAlertedThisSession.add(dim.key);
-        // 发送通知 - 暂时注释掉
-        /*if (notificationCenter?.addNotification) {
-          // 强制所有数值格式化为两位数小数
-          const formattedValue = value.toFixed(2);
-          notificationCenter.addNotification({
-            type: 'warning',
-            title: `雷达图警报: ${dim.label}`,
-            message: `当前值 ${formattedValue}${dim.unit} 触发 ${dim.alertType} 警报`,
-            autoClose: true,
-            duration: 8000
-          });
-        }*/
-      } else if (isAlert && dim.alertType && hasAlertedThisSession.has(dim.key)) {
-        // 记录报警被抑制的日志
-        console.log(`[Radar] Alert suppressed for key: ${dim.key}`);
-      }
-      
-      // 更新最后通知状态
-      lastNotifiedLevels.current.set(dim.key, isAlert);
-
-      updatedDimensions[index] = {
-        ...dim,
-        isCritical: isAlert
-      };
+    // 生成测试数据
+    const { priceData, orderData } = generateTestData();
+    
+    // 计算分时强度
+    const strengthResults = calculateIntradayStrength({
+      priceData,
+      orderData,
+      windowSize: 5,
+      useVolumeWeight: true,
+      useWAD: true
     });
-
-    setDimensions(updatedDimensions);
-    setAlerts(newAlerts);
-  }, [JSON.stringify(data), radarConfig, notificationCenter]);
-
-  // 计算雷达图点坐标
-  const calculatePointCoordinate = (value: number, dim: RadarDimensionConfig, index: number) => {
-    const { max, min } = dim;
-    const normalizedValue = Math.min(Math.max((value - min) / (max - min), 0), 1);
-    const angle = (index * 2 * Math.PI) / dimensions.length - Math.PI / 2;
-    const x = 50 + normalizedValue * 50 * Math.cos(angle);
-    const y = 50 + normalizedValue * 50 * Math.sin(angle);
-    return { x, y };
-  };
-
-  // 生成雷达图多边形路径
-  const generatePolygonPath = () => {
-    const points = dimensions.map((dim, index) => {
-      const value = data[dim.key];
-      const { x, y } = calculatePointCoordinate(value, dim, index);
-      return `${x},${y}`;
+    
+    // 计算承接力度
+    const absorptionResults = calculateAbsorptionStrength({
+      priceData,
+      orderData,
+      timeWindow: 10,
+      useLargeOrders: true
     });
-    return points.join(' ');
-  };
-
-  // 生成网格线路径
-  const generateGridPath = (level: number) => {
-    const points = dimensions.map((_, index) => {
-      const angle = (index * 2 * Math.PI) / dimensions.length - Math.PI / 2;
-      const x = 50 + (level * 50) * Math.cos(angle);
-      const y = 50 + (level * 50) * Math.sin(angle);
-      return `${x},${y}`;
+    
+    // 计算增强的分时分析
+    const enhancedResults = calculateEnhancedIntradayAnalysis({
+      priceData,
+      orderData,
+      strengthWindow: 5,
+      absorptionWindow: 10,
+      useWAD: true,
+      useLargeOrders: true
     });
-    return points.join(' ');
-  };
-
-  // 检查数据是否有效
-  const isDataValid = data && Object.values(data).every(value => typeof value === 'number' && !isNaN(value));
-
+    
+    // 获取最新的分析结果
+    const latestResult = enhancedResults.length > 0 ? enhancedResults[enhancedResults.length - 1] : null;
+    
+    // 构建雷达图数据
+    const newRadarData: RadarData = {
+      '分时强度': latestResult?.intradayStrength.compositeScore || 50,
+      '承接力度': (latestResult?.absorptionStrength.strength || 0.5) * 100,
+      '成交量因子': (latestResult?.intradayStrength.volumeFactor || 0.5) * 100,
+      '价格因子': ((latestResult?.intradayStrength.priceFactor || 0) + 1) * 50,
+      '特大单因子': (latestResult?.absorptionStrength.largeOrderFactor || 0.5) * 100,
+      '综合得分': latestResult?.combinedScore || 50
+    };
+    
+    setRadarData(newRadarData);
+  }, [stockCode]);
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      gap: '20px',
-      padding: '20px',
-      backgroundColor: '#1e1e2e',
-      borderRadius: '12px'
-    }}>
-      <div style={{
-        width: '100%',
-        maxWidth: '400px'
-      }}>
-        {isDataValid ? (
-          <svg width="400" height="400" viewBox="0 0 100 100">
-            {/* 绘制网格线 */}
-            {[0.25, 0.5, 0.75, 1].map((level, index) => (
-              <polygon
-                key={`grid-${index}`}
-                points={generateGridPath(level)}
-                fill="none"
-                stroke="#444"
-                strokeWidth="0.5"
-              />
-            ))}
-
-            {/* 绘制轴线 */}
-            {dimensions.map((dim, index) => {
-              const angle = (index * 2 * Math.PI) / dimensions.length - Math.PI / 2;
-              const xEnd = 50 + 55 * Math.cos(angle);
-              const yEnd = 50 + 55 * Math.sin(angle);
-              const isCritical = dim.isCritical;
-
+    <div className="smart-threshold-radar">
+      <div className="radar-header">
+        <h4>智能雷达图 - {stockCode}</h4>
+        <p className="analysis-type">分时强度分析</p>
+      </div>
+      <div className="radar-content">
+        {/* 雷达图图形区域 */}
+        <div className="radar-chart-container">
+          <svg className="radar-chart" viewBox="0 0 300 300">
+            {/* 雷达图背景网格 */}
+            <defs>
+              <pattern id="grid-pattern" width="20" height="20" patternUnits="userSpaceOnUse">
+                <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#333" strokeWidth="0.5" />
+              </pattern>
+            </defs>
+            <circle cx="150" cy="150" r="120" fill="url(#grid-pattern)" />
+            
+            {/* 雷达图轴线 */}
+            {Object.entries(radarData).map(([key, value], index) => {
+              const angle = (index / Object.keys(radarData).length) * 2 * Math.PI;
+              const x1 = 150;
+              const y1 = 150;
+              const x2 = x1 + 120 * Math.cos(angle - Math.PI / 2);
+              const y2 = y1 + 120 * Math.sin(angle - Math.PI / 2);
               return (
                 <line
-                  key={`axis-${index}`}
-                  x1="50"
-                  y1="50"
-                  x2={xEnd}
-                  y2={yEnd}
-                  stroke={isCritical ? '#ff4444' : '#888'}
-                  strokeWidth={isCritical ? '2' : '0.8'}
-                />
-              );
-            })}
-
-            {/* 绘制数据多边形 */}
-            <polygon
-              points={generatePolygonPath()}
-              fill="rgba(59, 130, 246, 0.3)"
-              stroke="#3b82f6"
-              strokeWidth="1.5"
-            />
-
-            {/* 绘制数据点 */}
-            {dimensions.map((dim, index) => {
-              const value = data[dim.key];
-              const { x, y } = calculatePointCoordinate(value, dim, index);
-              const isCritical = dim.isCritical;
-
-              return (
-                <circle
-                  key={`point-${index}`}
-                  cx={x}
-                  cy={y}
-                  r={isCritical ? '3' : '2'}
-                  fill={isCritical ? '#ff4444' : '#3b82f6'}
-                  stroke="white"
+                  key={`axis-${key}`}
+                  x1={x1}
+                  y1={y1}
+                  x2={x2}
+                  y2={y2}
+                  stroke="#555"
                   strokeWidth="1"
                 />
               );
             })}
-
-            {/* 绘制维度标签 */}
-            {dimensions.map((dim, index) => {
-              const angle = (index * 2 * Math.PI) / dimensions.length - Math.PI / 2;
-              const x = 50 + 65 * Math.cos(angle);
-              const y = 50 + 65 * Math.sin(angle);
-              const isCritical = dim.isCritical;
-
+            
+            {/* 雷达图数据多边形 */}
+            <polygon
+              points={Object.entries(radarData).map(([key, value], index) => {
+                const angle = (index / Object.keys(radarData).length) * 2 * Math.PI;
+                const radius = (value / 100) * 120;
+                const x = 150 + radius * Math.cos(angle - Math.PI / 2);
+                const y = 150 + radius * Math.sin(angle - Math.PI / 2);
+                return `${x},${y}`;
+              }).join(' ')}
+              fill="rgba(243, 139, 168, 0.3)"
+              stroke="#f38ba8"
+              strokeWidth="2"
+            />
+            
+            {/* 雷达图数据点 */}
+            {Object.entries(radarData).map(([key, value], index) => {
+              const angle = (index / Object.keys(radarData).length) * 2 * Math.PI;
+              const radius = (value / 100) * 120;
+              const x = 150 + radius * Math.cos(angle - Math.PI / 2);
+              const y = 150 + radius * Math.sin(angle - Math.PI / 2);
+              return (
+                <circle
+                  key={`point-${key}`}
+                  cx={x}
+                  cy={y}
+                  r="4"
+                  fill="#ffffff"
+                  stroke="#f38ba8"
+                  strokeWidth="2"
+                />
+              );
+            })}
+            
+            {/* 雷达图标签 */}
+            {Object.entries(radarData).map(([key, value], index) => {
+              const angle = (index / Object.keys(radarData).length) * 2 * Math.PI;
+              const radius = 135;
+              const x = 150 + radius * Math.cos(angle - Math.PI / 2);
+              const y = 150 + radius * Math.sin(angle - Math.PI / 2);
               return (
                 <text
-                  key={`label-${index}`}
+                  key={`label-${key}`}
                   x={x}
                   y={y}
                   textAnchor="middle"
                   dominantBaseline="middle"
-                  fill={isCritical ? '#ff4444' : '#fff'}
-                  fontSize="3"
-                  fontWeight={isCritical ? 'bold' : 'normal'}
+                  fill="#94a3b8"
+                  fontSize="11"
+                  fontWeight="500"
                 >
-                  {dim.label}
+                  {key}
                 </text>
               );
             })}
           </svg>
-        ) : (
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            alignItems: 'center',
-            height: '400px',
-            color: '#89dceb',
-            fontSize: '18px',
-            fontWeight: '500'
-          }}>
-            {/* 加载动画 */}
-            <div style={{
-              width: '40px',
-              height: '40px',
-              border: '3px solid rgba(137, 220, 235, 0.3)',
-              borderTop: '3px solid #89dceb',
-              borderRadius: '50%',
-              animation: 'spin 1s linear infinite',
-              marginBottom: '16px'
-            }} />
-            <span>正在扫描波段...</span>
-            <style jsx>{`
-              @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-              }
-            `}</style>
-          </div>
-        )}
-      </div>
-
-      {/* 数据表格 */}
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '10px',
-        width: '100%',
-        maxWidth: '400px'
-      }}>
-        {dimensions.map((dim) => {
-          const value = data[dim.key];
-          const isCritical = dim.isCritical;
-
-          return (
-            <div key={dim.key} style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              padding: '10px 15px',
-              backgroundColor: isCritical ? 'rgba(255, 68, 68, 0.1)' : '#2a2a3a',
-              borderRadius: '6px',
-              borderLeft: isCritical ? '4px solid #ff4444' : 'none'
-            }}>
-              <span style={{
-                fontSize: '14px',
-                color: '#bbb',
-                fontWeight: '500'
-              }}>{dim.label}</span>
-              <span style={{
-                fontSize: '16px',
-                color: isCritical ? '#ff4444' : '#fff',
-                fontWeight: '600'
-              }}>
-                {value.toFixed(2)}{dim.unit}
-              </span>
-              {isCritical && (
-                <span style={{
-                  marginLeft: '10px',
-                  fontSize: '14px'
-                }}>
-                  ⚠️
-                </span>
-              )}
+        </div>
+        
+        {/* 数值说明列表区域 */}
+        <div className="radar-info-separator"></div>
+        <div className="radar-info-list">
+          {Object.entries(radarData).map(([key, value]) => (
+            <div key={key} className="radar-info-item">
+              <div className="info-label">{key}</div>
+              <div className="info-value">{value.toFixed(1)}</div>
+              <div className="info-bar">
+                <div 
+                  className="bar-fill" 
+                  style={{ width: `${value}%` }}
+                ></div>
+              </div>
             </div>
-          );
-        })}
+          ))}
+          <div className="radar-summary">
+            <div className="summary-item">
+              <span className="label">综合信号:</span>
+              <span className="value">
+                {Object.values(radarData).length > 0 
+                  ? (Object.values(radarData).reduce((sum, val) => sum + val, 0) / Object.values(radarData).length).toFixed(1) 
+                  : '50.0'}
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
+      
+      <style jsx>{`
+        .smart-threshold-radar {
+          background: #000000;
+          border: 1px solid #333333;
+          border-radius: 0;
+          padding: 16px;
+          color: #ffffff;
+          width: 100%;
+          height: 500px;
+        }
+        
+        .radar-header {
+          margin-bottom: 16px;
+          border-bottom: 1px solid #333333;
+          padding-bottom: 8px;
+        }
+        
+        .radar-header h4 {
+          margin: 0;
+          font-size: 14px;
+          color: #89dceb;
+          font-weight: 500;
+        }
+        
+        .analysis-type {
+          margin: 4px 0 0 0;
+          font-size: 11px;
+          color: #94a3b8;
+        }
+        
+        .radar-content {
+          height: calc(100% - 48px);
+          display: flex;
+          flex-direction: column;
+          gap: 32px;
+        }
+        
+        /* 雷达图图形容器 */
+        .radar-chart-container {
+          flex: 1;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+        }
+        
+        .radar-chart {
+          width: 100%;
+          height: 100%;
+          max-width: 350px;
+          max-height: 350px;
+        }
+        
+        /* 分隔线 */
+        .radar-info-separator {
+          height: 1px;
+          background: #333333;
+          margin: 0 -16px;
+        }
+        
+        /* 数值说明列表 */
+        .radar-info-list {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 12px;
+          padding: 0 4px;
+        }
+        
+        .radar-info-item {
+          background: #111111;
+          border: 1px solid #333333;
+          border-radius: 0;
+          padding: 12px;
+          display: flex;
+          flex-direction: column;
+        }
+        
+        .info-label {
+          font-size: 11px;
+          color: #94a3b8;
+          margin-bottom: 6px;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+        
+        .info-value {
+          font-size: 18px;
+          font-weight: 600;
+          color: #ffffff;
+          margin-bottom: 8px;
+        }
+        
+        .info-bar {
+          height: 4px;
+          background: #222222;
+          border: 1px solid #444444;
+          border-radius: 0;
+          overflow: hidden;
+        }
+        
+        .bar-fill {
+          height: 100%;
+          background: linear-gradient(90deg, #f38ba8, #c4a7e7);
+          transition: width 0.5s ease;
+        }
+        
+        /* 总结部分 */
+        .radar-summary {
+          grid-column: 1 / -1;
+          margin-top: 16px;
+          padding-top: 12px;
+          border-top: 1px solid #333333;
+          display: flex;
+          justify-content: center;
+        }
+        
+        .summary-item {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        
+        .summary-item .label {
+          font-size: 12px;
+          color: #94a3b8;
+        }
+        
+        .summary-item .value {
+          font-size: 16px;
+          font-weight: 600;
+          color: #a6e3a1;
+        }
+      `}</style>
     </div>
   );
-}
+};
+
+export default SmartThresholdRadar;

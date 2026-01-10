@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { StockBasicInfo } from '../lib/api/market';
 import { apiGet } from '../lib/api/common/fetch';
 
@@ -46,6 +46,10 @@ interface IntelligenceBriefProps {
   isExpanded?: boolean;
   onToggle?: (expanded: boolean) => void;
   stockCode?: string;
+  alertStatus?: {           // 警报状态
+    isAlert: boolean;       // 是否有警报
+    alertType?: string;     // 警报类型
+  };
 }
 
 // 模拟数据生成函数
@@ -102,12 +106,19 @@ export default function IntelligenceBrief({
   data,
   isExpanded = true,
   onToggle,
-  stockCode = 'SH600000'
+  stockCode = 'SH600000',
+  alertStatus = { isAlert: false }
 }: IntelligenceBriefProps = {}) {
   const [expanded, setExpanded] = useState(isExpanded);
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState(false);
   const [localData, setLocalData] = useState<IntelligenceBriefData | null>(null);
+  const [alert, setAlert] = useState(alertStatus);
+
+  // 监听外部传入的警报状态变化
+  useEffect(() => {
+    setAlert(alertStatus);
+  }, [alertStatus]);
 
   const toggleExpand = () => {
     const newExpanded = !expanded;
@@ -125,9 +136,12 @@ export default function IntelligenceBrief({
     setApiError(false);
     
     try {
-      // 调用API获取数据
+      // 调用API获取数据，强制不使用mock数据
       const response = await apiGet<IntelligenceBriefData>('/ai-inference/intelligence-brief', {
         stockCode
+      }, {
+        useMock: false, // 确保在Token有效时使用真实数据
+        requiresAuth: false // AI简报API不需要认证
       });
       
       // 检查响应状态
@@ -159,12 +173,19 @@ export default function IntelligenceBrief({
   }, [data]);
 
   // 使用本地数据、传入数据或模拟数据
-  const displayData = localData || data || generateMockBrief();
+  const displayData = useMemo(() => {
+    return localData || data || generateMockBrief();
+  }, [localData, data]);
 
   return (
     <div className="intelligence-brief">
       <div className="brief-header">
         <h2>AI选股情报简报</h2>
+        {alert.isAlert && (
+          <div className="top-secret-alert">
+            【绝密级】
+          </div>
+        )}
       </div>
       
       <div className="brief-content">
@@ -192,8 +213,10 @@ export default function IntelligenceBrief({
           <ul className="factors">
             {displayData.selectionLogic.factors.map((factor, index) => (
               <li key={index}>
-                <span className="factor-name">{factor.name}</span>
-                <span className="factor-score">{factor.score}</span>
+                <div className="factor-header">
+                  <span className="factor-name">{factor.name}</span>
+                  <span className="factor-score">{factor.score}</span>
+                </div>
                 <span className="factor-desc">{factor.description}</span>
               </li>
             ))}
@@ -211,6 +234,20 @@ export default function IntelligenceBrief({
           height: 100%;
           overflow-y: auto;
         }
+
+        /* 绝密级警报样式 */
+        .top-secret-alert {
+          background-color: rgba(255, 0, 0, 0.8);
+          color: white;
+          padding: 4px 8px;
+          border-radius: 4px;
+          font-size: 12px;
+          font-weight: bold;
+          text-align: center;
+          margin-top: 8px;
+        }
+
+
         
         .brief-header {
           margin-bottom: 16px;
@@ -226,7 +263,10 @@ export default function IntelligenceBrief({
         .brief-content {
           display: flex;
           flex-direction: column;
-          gap: 16px;
+          gap: 20px;
+          padding: 16px;
+          overflow-y: auto;
+          max-height: calc(100% - 80px);
         }
         
         .loading, .error {
@@ -264,31 +304,31 @@ export default function IntelligenceBrief({
         
         .section {
           background-color: rgba(0, 0, 0, 0.2);
-          border-radius: 4px;
-          padding: 12px;
+          border-radius: 6px;
+          padding: 16px;
         }
         
         .section h3 {
-          margin: 0 0 8px 0;
-          font-size: 12px;
+          margin: 0 0 12px 0;
+          font-size: 14px;
           font-weight: 600;
           color: #00d4ff;
         }
         
         .decision {
           text-align: center;
-          font-size: 14px;
+          font-size: 16px;
           font-weight: 600;
           color: #00d4ff;
-          padding: 12px;
+          padding: 16px;
           background-color: rgba(0, 0, 0, 0.3);
-          border-radius: 4px;
+          border-radius: 6px;
         }
         
         .score {
-          font-size: 11px;
+          font-size: 13px;
           color: #00d4ff;
-          margin-bottom: 8px;
+          margin-bottom: 12px;
         }
         
         .factors {
@@ -297,34 +337,44 @@ export default function IntelligenceBrief({
           margin: 0;
           display: flex;
           flex-direction: column;
-          gap: 8px;
+          gap: 12px;
         }
         
         .factors li {
           display: flex;
+          flex-direction: column;
           gap: 8px;
-          font-size: 11px;
+          font-size: 13px;
+          padding: 12px;
+          background-color: rgba(0, 0, 0, 0.1);
+          border-radius: 4px;
+        }
+        
+        .factor-header {
+          display: flex;
+          gap: 12px;
           align-items: center;
         }
         
         .factor-name {
           color: #ccc;
           font-weight: 500;
-          width: 80px;
+          width: 90px;
         }
         
         .factor-score {
           text-align: center;
           background-color: rgba(0, 0, 0, 0.3);
-          padding: 2px 4px;
-          border-radius: 2px;
+          padding: 6px 12px;
+          border-radius: 4px;
           color: #00d4ff;
-          width: 40px;
+          width: 60px;
         }
         
         .factor-desc {
-          color: #888;
-          flex: 1;
+          color: #aaa;
+          line-height: 1.5;
+          margin-left: 102px;
         }
       `}</style>
     </div>

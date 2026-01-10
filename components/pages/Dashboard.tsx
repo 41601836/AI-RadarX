@@ -8,29 +8,36 @@ import SearchComponent from '../SearchComponent';
 import ErrorBoundary from '../ErrorBoundary';
 import DataHealth from '../DataHealth';
 import IntelligenceBrief from '../IntelligenceBrief';
+import ARadarPanel from '../ARadarPanel';
+import MarketPulse from '../MarketPulse';
 import { fetchHeatFlowAlertList, HeatFlowAlertItem } from '../../lib/api/heatFlow/alert';
 import { StockBasicInfo } from '../../lib/api/market';
 import { useStockContext } from '../../lib/context/StockContext';
+// 导入分时强度算法
+import { 
+  calculateEnhancedIntradayAnalysis, 
+  EnhancedIntradayAnalysisResult,
+  RealTimeIntradayStrengthCalculator
+} from '../../lib/algorithms/intradayStrength';
+import { OrderItem } from '../../lib/algorithms/largeOrder';
 
 // 动态导入组件
-const SmartThresholdRadar = dynamic(() => import('../SmartThresholdRadar'), {
-  loading: () => <Skeleton />,
-  ssr: false
-});
-
 const StrategyPerformance = dynamic(() => import('../StrategyPerformance'), {
   loading: () => <Skeleton />,
   ssr: false
 });
 
+// 导入智能雷达图组件
+import SmartThresholdRadar from '../SmartThresholdRadar';
+
 // RadarData 类型定义
 interface RadarData {
-  turnover: number;
-  explosionRate: number;
-  profitTaking: number;
-  lhasaRatio: number;
-  volumeRatio: number;
-  amplitude: number;
+  liquidity: number;
+  sellingPressure: number;
+  sentiment: number;
+  volumePower: number;
+  trendStrength: number;
+  chipConcentration: number;
 }
 
 // Skeleton 占位图组件
@@ -64,13 +71,14 @@ interface PositionStock {
 const Dashboard: React.FC = () => {
   const [alertData, setAlertData] = useState<HeatFlowAlertItem[]>([]);
   const [loadingAlerts, setLoadingAlerts] = useState(true);
+  const [updatingData, setUpdatingData] = useState(false);
   
   // 从全局状态获取当前选中的股票
   const { currentTicker } = useStockContext();
   
-  // 市场指数数据状态
+  // 市场指数数据状态 - 强制校准为指定基准
   const [marketIndices, setMarketIndices] = useState<MarketIndex[]>([
-    { name: '上证指数', value: '3,124.56', change: '+1.23%', isPositive: true },
+    { name: '上证指数', value: '4,085.50', change: '0.00%', isPositive: true },
     { name: '深证成指', value: '10,256.78', change: '-0.45%', isPositive: false },
     { name: '创业板指', value: '2,018.34', change: '+2.10%', isPositive: true },
     { name: '科创50', value: '856.78', change: '+1.56%', isPositive: true },
@@ -85,17 +93,23 @@ const Dashboard: React.FC = () => {
   
   // 智能阈值雷达图数据状态
   const [radarData, setRadarData] = useState<RadarData>({
-    turnover: 6500,       // 成交额（亿）- 触发流动性警报
-    explosionRate: 55,    // 炸板率（%）- 触发情绪危急
-    profitTaking: 92,     // 获利盘（%）- 触发筹码危险
-    lhasaRatio: 35,       // 拉萨天团占比（%）- 触发散户踩踏
-    volumeRatio: 2.5,     // 量比
-    amplitude: 12         // 振幅（%）
+    liquidity: 55,       // 流动性 - 触发流动性警报
+    sellingPressure: 75, // 抛压 - 触发筹码危险
+    sentiment: 85,       // 情绪 - 触发情绪危急
+    volumePower: 60,     // 量能强度
+    trendStrength: 65,   // 趋势强度
+    chipConcentration: 50 // 筹码集中度
   });
+  
+  // 分时强度相关状态
+  const [intradayAnalysisResult, setIntradayAnalysisResult] = useState<EnhancedIntradayAnalysisResult | null>(null);
+  const [intradayHistory, setIntradayHistory] = useState<EnhancedIntradayAnalysisResult[]>([]);
+  const strengthCalculatorRef = React.useRef<RealTimeIntradayStrengthCalculator | null>(null);
   
   // 获取游资预警数据
   const fetchAlertData = async () => {
     try {
+      setUpdatingData(true);
       setLoadingAlerts(true);
       const response = await fetchHeatFlowAlertList({
         pageNum: 1,
@@ -107,37 +121,150 @@ const Dashboard: React.FC = () => {
       console.error('Error fetching heat flow alerts:', error);
     } finally {
       setLoadingAlerts(false);
+      // 添加一个延迟，让跑马灯效果能够显示
+      setTimeout(() => {
+        setUpdatingData(false);
+      }, 2000);
+    }
+  };
+  
+  // 生成模拟价格数据
+  const generateMockPriceData = () => {
+    const priceData = [];
+    const now = Date.now();
+    const basePrice = 100 + Math.random() * 20;
+    
+    for (let i = 0; i < 100; i++) {
+      const timestamp = now - (100 - i) * 60000; // 每分钟一个数据点
+      const priceChange = (Math.random() - 0.5) * 2;
+      const price = basePrice + priceChange * i;
+      const volume = 100000 + Math.random() * 1000000;
+      
+      priceData.push({
+        timestamp,
+        high: price + Math.random() * 0.5,
+        low: price - Math.random() * 0.5,
+        close: price,
+        volume: Math.round(volume)
+      });
+    }
+    
+    return priceData;
+  };
+  
+  // 生成模拟订单数据
+  const generateMockOrderData = () => {
+    const orderData: OrderItem[] = [];
+    const now = Date.now();
+    const basePrice = 100 + Math.random() * 20;
+    
+    for (let i = 0; i < 500; i++) {
+      const timestamp = new Date(now - (500 - i) * 1000).toISOString(); // 每秒一个订单
+      const price = basePrice + (Math.random() - 0.5) * 2;
+      const volume = 100 + Math.random() * 10000;
+      const direction = Math.random() > 0.5 ? 'buy' : 'sell';
+      
+      orderData.push({
+        tradeTime: timestamp,
+        tradePrice: price,
+        tradeVolume: Math.round(volume),
+        tradeAmount: Math.round(price * volume * 100), // 单位：分
+        tradeDirection: direction
+      });
+    }
+    
+    return orderData;
+  };
+  
+  // 计算分时强度
+  const calculateIntradayStrength = () => {
+    const priceData = generateMockPriceData();
+    const orderData = generateMockOrderData();
+    
+    const results = calculateEnhancedIntradayAnalysis({
+      priceData,
+      orderData,
+      strengthWindow: 5,
+      absorptionWindow: 10,
+      useWAD: true,
+      useLargeOrders: true
+    });
+    
+    if (results.length > 0) {
+      setIntradayAnalysisResult(results[results.length - 1]);
+      setIntradayHistory(results.slice(-30)); // 保留最近30个数据点
     }
   };
 
   // 模拟雷达图数据更新函数 - 提高安全概率，减少误报
   const updateRadarData = () => {
     setRadarData(prevData => ({
-      // 成交额：70%概率>7000亿（安全），30%概率<7000亿（警报）
-      turnover: Math.random() > 0.3 ? 7000 + Math.random() * 1500 : 5000 + Math.random() * 2000,
-      // 炸板率：70%概率<50%（安全），30%概率>50%（警报）
-      explosionRate: Math.random() > 0.3 ? 20 + Math.random() * 30 : 50 + Math.random() * 25,
-      // 获利盘：70%概率在20-90%之间（安全），30%概率在危险区域
-      profitTaking: Math.random() > 0.3 
-        ? 20 + Math.random() * 70 
-        : Math.random() > 0.5 ? 5 + Math.random() * 15 : 90 + Math.random() * 5,
-      // 拉萨天团占比：70%概率<30%（安全），30%概率>30%（警报）
-      lhasaRatio: Math.random() > 0.3 ? 10 + Math.random() * 20 : 30 + Math.random() * 15,
-      // 量比：保持在0-5之间（安全）
-      volumeRatio: Math.random() * 5,
-      // 振幅：70%概率<15%（安全），30%概率>15%（警报）
-      amplitude: Math.random() > 0.3 ? 5 + Math.random() * 10 : 15 + Math.random() * 10
+      // 流动性：70%概率>60分（安全），30%概率<60分（警报）
+      liquidity: Math.random() > 0.3 ? 60 + Math.random() * 40 : 20 + Math.random() * 40,
+      // 抛压：70%概率<70分（安全），30%概率>70分（警报）
+      sellingPressure: Math.random() > 0.3 ? 30 + Math.random() * 40 : 70 + Math.random() * 30,
+      // 情绪：70%概率在30-80分之间（安全），30%概率在危险区域
+      sentiment: Math.random() > 0.3 
+        ? 30 + Math.random() * 50 
+        : Math.random() > 0.5 ? 10 + Math.random() * 20 : 80 + Math.random() * 20,
+      // 量能强度：70%概率>40分（安全），30%概率<40分（警报）
+      volumePower: Math.random() > 0.3 ? 40 + Math.random() * 60 : 10 + Math.random() * 30,
+      // 趋势强度：70%概率>40分（安全），30%概率<40分（警报）
+      trendStrength: Math.random() > 0.3 ? 40 + Math.random() * 60 : 10 + Math.random() * 30,
+      // 筹码集中度：70%概率>30分（安全），30%概率<30分（警报）
+      chipConcentration: Math.random() > 0.3 ? 30 + Math.random() * 70 : 10 + Math.random() * 20
     }));
+  };
+
+  // 模拟市场指数更新函数
+  const updateMarketIndices = () => {
+    setMarketIndices(prevIndices => {
+      // 创建新的指数数组
+      return prevIndices.map((index, idx) => {
+        // 只更新上证指数（第一个索引）
+        if (idx === 0) {
+          // 强制校准基准价格：4085.50点
+          const basePrice = 4085.50;
+          // 波动范围：±1.5%
+          const maxChange = basePrice * 0.015;
+          // 随机波动
+          const randomChange = (Math.random() - 0.5) * maxChange * 2;
+          // 计算新价格
+          const newPrice = basePrice + randomChange;
+          // 格式化价格，保留两位小数
+          const formattedPrice = newPrice.toFixed(2);
+          // 计算涨跌幅
+          const changePercent = (randomChange / basePrice * 100).toFixed(2);
+          // 判断涨跌
+          const isPositive = randomChange >= 0;
+          // 格式化涨跌幅字符串
+          const formattedChange = `${isPositive ? '+' : ''}${changePercent}%`;
+          // 返回新的上证指数数据
+          return {
+            ...index,
+            value: formattedPrice.replace(/\B(?=(\d{3})+(?!\d))/g, ','), // 添加千位分隔符
+            change: formattedChange,
+            isPositive
+          };
+        }
+        // 其他指数保持不变
+        return index;
+      });
+    });
   };
 
   useEffect(() => {
     fetchAlertData();
     updateRadarData();  // 初始加载时更新雷达图数据
+    updateMarketIndices(); // 初始加载时更新市场指数
+    calculateIntradayStrength(); // 初始加载时计算分时强度
     
     // 设置定时刷新（每15秒）
     const interval = setInterval(() => {
       fetchAlertData();
       updateRadarData();  // 同时更新雷达图数据
+      updateMarketIndices(); // 同时更新市场指数
+      calculateIntradayStrength(); // 同时计算分时强度
     }, 15000);
     
     // 组件卸载时清除定时器
@@ -146,8 +273,48 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="dashboard">
-      {/* 主要内容区域和侧边栏 */}
-      <div className="dashboard-main">
+      {/* 四栏布局：左侧市场状态、中间主内容、右侧雷达面板、最右侧情报简报 */}
+      <div className="dashboard-main four-column-layout">
+        <style jsx>{`
+          /* 跑马灯样式 */
+          .updating-marquee {
+            overflow: hidden;
+            background-color: rgba(255, 153, 0, 0.1);
+            border: 1px solid #ff9900;
+            border-radius: 4px;
+            margin-bottom: 12px;
+            padding: 8px 0;
+            white-space: nowrap;
+            position: relative;
+          }
+
+          .marquee-content {
+            display: inline-block;
+            animation: marquee 10s linear infinite;
+          }
+
+          .marquee-text {
+            display: inline-block;
+            padding: 0 40px;
+            color: #ff9900;
+            font-weight: bold;
+            font-size: 14px;
+          }
+
+          @keyframes marquee {
+            0% {
+              transform: translateX(100%);
+            }
+            100% {
+              transform: translateX(-100%);
+            }
+          }
+        `}</style>
+        {/* 左侧F1: MARKET_STATUS面板 */}
+        <aside className="dashboard-market-status">
+          <MarketPulse />
+        </aside>
+
         {/* 左侧主内容 */}
         <main className="dashboard-content">
           <div className="content-grid">
@@ -194,18 +361,100 @@ const Dashboard: React.FC = () => {
                 <WADChipDistribution symbol={currentTicker?.ts_code || "SH600000"} />
               </ErrorBoundary>
             </div>
-
-            {/* 右下角：智能阈值雷达图 */}
-            <div className="panel smart-radar">
-              <h2>智能雷达图</h2>
-              <ErrorBoundary moduleName="智能阈值雷达图">
-                <SmartThresholdRadar data={radarData} />
-              </ErrorBoundary>
+            
+            {/* 右下角：分时强度分析 */}
+            <div className="panel intraday-strength">
+              <h2>分时强度分析</h2>
+              {intradayAnalysisResult ? (
+                <div className="intraday-strength-content">
+                  <div className="strength-overview">
+                    <div className="metric-card">
+                      <span className="metric-label">分时强度</span>
+                      <span className={`metric-value ${intradayAnalysisResult.intradayStrength.strength > 0 ? 'positive' : 'negative'}`}>
+                        {intradayAnalysisResult.intradayStrength.strength.toFixed(2)}
+                      </span>
+                      <span className="metric-desc">
+                        {intradayAnalysisResult.intradayStrength.strength > 0 ? '强势' : '弱势'}
+                      </span>
+                    </div>
+                    
+                    <div className="metric-card">
+                      <span className="metric-label">承接力度</span>
+                      <span className={`metric-value ${intradayAnalysisResult.absorptionStrength.strength > 0.5 ? 'positive' : 'neutral'}`}>
+                        {intradayAnalysisResult.absorptionStrength.strength.toFixed(2)}
+                      </span>
+                      <span className="metric-desc">
+                        {intradayAnalysisResult.absorptionStrength.absorptionLevel}
+                      </span>
+                    </div>
+                    
+                    <div className="metric-card">
+                      <span className="metric-label">综合得分</span>
+                      <span className={`metric-value ${intradayAnalysisResult.combinedScore > 50 ? 'positive' : 'negative'}`}>
+                        {intradayAnalysisResult.combinedScore.toFixed(1)}
+                      </span>
+                      <span className="metric-desc">
+                        {intradayAnalysisResult.signal}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="strength-details">
+                    <h3>详细指标</h3>
+                    <div className="details-grid">
+                      <div className="detail-item">
+                        <span className="detail-label">成交量因子</span>
+                        <span className="detail-value">{intradayAnalysisResult.intradayStrength.volumeFactor.toFixed(2)}</span>
+                      </div>
+                      <div className="detail-item">
+                        <span className="detail-label">价格因子</span>
+                        <span className={`detail-value ${intradayAnalysisResult.intradayStrength.priceFactor > 0 ? 'positive' : 'negative'}`}>
+                          {intradayAnalysisResult.intradayStrength.priceFactor.toFixed(2)}
+                        </span>
+                      </div>
+                      {intradayAnalysisResult.intradayStrength.wadFactor && (
+                        <div className="detail-item">
+                          <span className="detail-label">WAD因子</span>
+                          <span className="detail-value">{intradayAnalysisResult.intradayStrength.wadFactor.toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div className="detail-item">
+                        <span className="detail-label">价格稳定性</span>
+                        <span className="detail-value">{intradayAnalysisResult.absorptionStrength.priceStability.toFixed(2)}</span>
+                      </div>
+                      <div className="detail-item">
+                        <span className="detail-label">买卖盘比例</span>
+                        <span className="detail-value">{intradayAnalysisResult.absorptionStrength.buySellRatio.toFixed(2)}</span>
+                      </div>
+                      {intradayAnalysisResult.absorptionStrength.largeOrderFactor && (
+                        <div className="detail-item">
+                          <span className="detail-label">特大单因子</span>
+                          <span className="detail-value">{intradayAnalysisResult.absorptionStrength.largeOrderFactor.toFixed(2)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="loading">加载分时强度数据中...</div>
+              )}
             </div>
 
             {/* 底部：实时游资预警流 */}
             <div className="panel heat-flow-alerts">
               <h2>实时游资预警流</h2>
+              
+              {/* 数据更新中跑马灯效果 */}
+              {updatingData && (
+                <div className="updating-marquee">
+                  <div className="marquee-content">
+                    <span className="marquee-text">[数据更新中...]</span>
+                    <span className="marquee-text">[数据更新中...]</span>
+                    <span className="marquee-text">[数据更新中...]</span>
+                  </div>
+                </div>
+              )}
+              
               {loadingAlerts ? (
                 <div className="loading">加载中...</div>
               ) : alertData?.length === 0 ? (
@@ -243,9 +492,20 @@ const Dashboard: React.FC = () => {
           </div>
         </main>
 
-        {/* 右侧AI选股情报简报侧边栏 */}
+        {/* 右侧雷达面板 */}
+        <div className="dashboard-radar-panel">
+          <ARadarPanel />
+          <SmartThresholdRadar stockCode={currentTicker?.ts_code || "SH600000"} />
+        </div>
+
+        {/* 最右侧AI选股情报简报侧边栏 */}
         <aside className="dashboard-sidebar">
-          <IntelligenceBrief />
+          <IntelligenceBrief 
+            alertStatus={{ 
+              isAlert: radarData.liquidity < 60 || radarData.sellingPressure > 70, // 示例条件：流动性不足或抛压过大
+              alertType: radarData.liquidity < 60 ? 'ABNORMAL_VOLUME' : 'SUDDEN_DUMP'
+            }} 
+          />
         </aside>
       </div>
     </div>

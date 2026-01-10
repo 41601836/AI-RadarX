@@ -1,3 +1,4 @@
-// 大单异动分析模块API接口
-export * from './realTime';
-export * from './trend';
+// largeOrder API模块索引
+
+export * from './orderlargerealtime';
+export * from './orderlargetrend';

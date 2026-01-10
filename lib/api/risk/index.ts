@@ -1,4 +1,4 @@
-// 风险控制模块API接口
-export * from './assessment';
-export * from './stopRule';
-export * from './simulation';
+// risk API模块索引
+
+export * from './riskaccountassessment';
+export * from './riskstopruleconfig';

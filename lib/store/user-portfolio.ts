@@ -94,15 +94,19 @@ const defaultState: Omit<UserPortfolioState, keyof { [K in keyof UserPortfolioSt
   activeTab: 'dashboard' // 默认显示仪表盘
 };
 
-// 计算衍生状态
-function calculateDerivedState(state: Omit<UserPortfolioState, keyof { [K in keyof UserPortfolioState as UserPortfolioState[K] extends Function ? K : never]: any }>): Omit<UserPortfolioState, keyof { [K in keyof UserPortfolioState as UserPortfolioState[K] extends Function ? K : never]: any }> {
-  const totalMarketValue = state.positions.reduce((sum, pos) => sum + pos.marketValue, 0);
-  const totalCost = state.positions.reduce((sum, pos) => sum + pos.shares * pos.averagePrice, 0);
+// 静态计算衍生状态的辅助函数
+function calculatePortfolioStats(positions: PortfolioPosition[]): {
+  totalMarketValue: number;
+  totalProfitLoss: number;
+  totalProfitLossRate: number;
+} {
+  // 使用静态计算，避免不必要的实时计算
+  const totalMarketValue = positions.reduce((sum, pos) => sum + pos.marketValue, 0);
+  const totalCost = positions.reduce((sum, pos) => sum + pos.shares * pos.averagePrice, 0);
   const totalProfitLoss = totalMarketValue - totalCost;
   const totalProfitLossRate = totalCost > 0 ? (totalProfitLoss / totalCost) * 100 : 0;
   
   return {
-    ...state,
     totalMarketValue,
     totalProfitLoss,
     totalProfitLossRate
@@ -117,38 +121,63 @@ export const useUserStore = create<UserPortfolioState>()(
       
       // 持仓操作
       addPosition: (position) => set((state) => {
-        const newState = calculateDerivedState({
+        const newPositions = [...state.positions, position];
+        const { totalMarketValue, totalProfitLoss, totalProfitLossRate } = calculatePortfolioStats(newPositions);
+        
+        return {
           ...state,
-          positions: [...state.positions, position]
-        });
-        return newState;
+          positions: newPositions,
+          totalMarketValue,
+          totalProfitLoss,
+          totalProfitLossRate
+        };
       }),
       
       updatePosition: (stockCode, updates) => set((state) => {
-        const newState = calculateDerivedState({
+        const newPositions = state.positions.map(pos => 
+          pos.stockCode === stockCode ? { ...pos, ...updates } : pos
+        );
+        const { totalMarketValue, totalProfitLoss, totalProfitLossRate } = calculatePortfolioStats(newPositions);
+        
+        return {
           ...state,
-          positions: state.positions.map(pos => 
-            pos.stockCode === stockCode ? { ...pos, ...updates } : pos
-          )
-        });
-        return newState;
+          positions: newPositions,
+          totalMarketValue,
+          totalProfitLoss,
+          totalProfitLossRate
+        };
       }),
       
       removePosition: (stockCode) => set((state) => {
-        const newState = calculateDerivedState({
+        const newPositions = state.positions.filter(pos => pos.stockCode !== stockCode);
+        const { totalMarketValue, totalProfitLoss, totalProfitLossRate } = calculatePortfolioStats(newPositions);
+        
+        return {
           ...state,
-          positions: state.positions.filter(pos => pos.stockCode !== stockCode)
-        });
-        return newState;
+          positions: newPositions,
+          totalMarketValue,
+          totalProfitLoss,
+          totalProfitLossRate
+        };
       }),
       
       clearPositions: () => set((state) => {
-        const newState = calculateDerivedState({
+        const { totalMarketValue, totalProfitLoss, totalProfitLossRate } = calculatePortfolioStats([]);
+        
+        return {
           ...state,
-          positions: []
-        });
-        return newState;
+          positions: [],
+          totalMarketValue,
+          totalProfitLoss,
+          totalProfitLossRate
+        };
       }),
+      
+      // 更新可用现金时，不再重新计算持仓统计
+      updateAvailableCash: (amount) => set((state) => ({
+        ...state,
+        availableCash: amount
+      })),
       
       // 自选股操作
       addToWatchlist: (stockCode, stockName) => set((state) => {
@@ -181,15 +210,6 @@ export const useUserStore = create<UserPortfolioState>()(
         ...state,
         riskPreference: { ...state.riskPreference, ...preference }
       })),
-      
-      // 现金操作
-      updateAvailableCash: (amount) => set((state) => {
-        const newState = calculateDerivedState({
-          ...state,
-          availableCash: amount
-        });
-        return newState;
-      }),
       
       // 标签操作
       setActiveTab: (tab) => set((state) => ({

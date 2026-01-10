@@ -71,55 +71,55 @@ const Assets: React.FC = () => {
   };
 
   return (
-    <div className="assets-page">
-      <div className="page-header">
-        <h2>账户资产</h2>
+    <div className="assets-page border-zinc-800">
+      <div className="page-header border-zinc-800">
+        <h2 className="font-mono">账户资产</h2>
       </div>
 
-      <div className="assets-container">
+      <div className="assets-container border-zinc-800">
         {/* 资产概览卡片 */}
-        <div className="overview-cards">
-          <div className="asset-card">
-            <div className="card-header">
-              <h3>总市值</h3>
+        <div className="overview-cards border-zinc-800">
+          <div className="asset-card border-zinc-800">
+            <div className="card-header border-zinc-800">
+              <h3 className="font-mono">总市值</h3>
             </div>
-            <div className="card-value">{totalMarketValue.toFixed(2)}</div>
+            <div className="card-value font-mono">{totalMarketValue.toFixed(2)}</div>
           </div>
           
-          <div className="asset-card">
-            <div className="card-header">
-              <h3>可用资金</h3>
+          <div className="asset-card border-zinc-800">
+            <div className="card-header border-zinc-800">
+              <h3 className="font-mono">可用资金</h3>
             </div>
-            <div className="card-value">{availableCash.toFixed(2)}</div>
+            <div className="card-value font-mono">{availableCash.toFixed(2)}</div>
           </div>
           
-          <div className={`asset-card ${totalProfitLoss >= 0 ? 'positive' : 'negative'}`}>
-            <div className="card-header">
-              <h3>总盈亏</h3>
+          <div className={`asset-card border-zinc-800 ${totalProfitLoss >= 0 ? 'positive' : 'negative'}`}>
+            <div className="card-header border-zinc-800">
+              <h3 className="font-mono">总盈亏</h3>
             </div>
-            <div className="card-value">
+            <div className="card-value font-mono">
               {totalProfitLoss >= 0 ? '+' : ''}{totalProfitLoss.toFixed(2)}
             </div>
           </div>
           
-          <div className={`asset-card ${totalProfitLossRate >= 0 ? 'positive' : 'negative'}`}>
-            <div className="card-header">
-              <h3>总盈亏率</h3>
+          <div className={`asset-card border-zinc-800 ${totalProfitLossRate >= 0 ? 'positive' : 'negative'}`}>
+            <div className="card-header border-zinc-800">
+              <h3 className="font-mono">总盈亏率</h3>
             </div>
-            <div className="card-value">
+            <div className="card-value font-mono">
               {totalProfitLossRate >= 0 ? '+' : ''}{totalProfitLossRate.toFixed(2)}%
             </div>
           </div>
         </div>
         
         {/* 盈亏曲线图 */}
-        <div className="chart-container">
-          <div className="chart-header">
-            <h3>盈亏趋势</h3>
+        <div className="chart-container border-zinc-800">
+          <div className="chart-header border-zinc-800">
+            <h3 className="font-mono">盈亏趋势</h3>
           </div>
-          <div className="chart-content">
+          <div className="chart-content border-zinc-800">
             {/* 简单的模拟图表 */}
-            <div className="chart-placeholder">
+            <div className="chart-placeholder border-zinc-800">
               <svg width="100%" height="300" viewBox="0 0 800 300">
                 <defs>
                   <linearGradient id="profitGradient" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -164,14 +164,14 @@ const Assets: React.FC = () => {
           </div>
           
           {/* 持仓详情 */}
-          <div className="positions-container">
-            <div className="positions-header">
-              <h3>持仓详情</h3>
+          <div className="positions-container border-zinc-800">
+            <div className="positions-header border-zinc-800">
+              <h3 className="font-mono">持仓详情</h3>
             </div>
             {positions.length === 0 ? (
-              <div className="no-positions">暂无持仓</div>
+              <div className="no-positions border-zinc-800 font-mono">暂无持仓</div>
             ) : (
-              <div className="positions-list">
+              <div className="positions-list border-zinc-800">
                 {positions.map(position => (
                   <div key={position.stockCode} className="position-item">
                     <div className="position-info">
@@ -274,300 +274,7 @@ const Assets: React.FC = () => {
           </div>
         </div>
 
-      <style jsx>{`
-        .assets-page {
-          padding: 24px;
-          height: 100%;
-          overflow-y: auto;
-        }
-
-        .page-header {
-          margin-bottom: 24px;
-        }
-
-        .page-header h2 {
-          margin: 0;
-          font-size: 24px;
-          color: #c4a7e7;
-          font-weight: 500;
-        }
-
-        .assets-container {
-          display: flex;
-          flex-direction: column;
-          gap: 24px;
-        }
-
-        .overview-cards {
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 20px;
-        }
-
-        .asset-card {
-          background-color: #1e1e2e;
-          border-radius: 8px;
-          padding: 24px;
-          text-align: center;
-          border: 1px solid #2a2a3a;
-          transition: transform 0.2s;
-        }
-
-        .asset-card:hover {
-          transform: translateY(-2px);
-        }
-
-        .asset-card.positive {
-          border-color: #a6e3a1;
-          background-color: rgba(166, 227, 161, 0.1);
-        }
-
-        .asset-card.negative {
-          border-color: #f38ba8;
-          background-color: rgba(243, 139, 168, 0.1);
-        }
-
-        .card-header {
-          margin-bottom: 16px;
-        }
-
-        .card-header h3 {
-          margin: 0;
-          font-size: 14px;
-          color: #94a3b8;
-          font-weight: 500;
-        }
-
-        .card-value {
-          font-size: 32px;
-          font-weight: 600;
-          color: #cdd6f4;
-        }
-
-        .chart-container {
-          background-color: #1e1e2e;
-          border-radius: 8px;
-          padding: 24px;
-          border: 1px solid #2a2a3a;
-        }
-
-        .chart-header {
-          margin-bottom: 20px;
-        }
-
-        .chart-header h3 {
-          margin: 0;
-          font-size: 18px;
-          color: #cdd6f4;
-          font-weight: 500;
-        }
-
-        .chart-content {
-          height: 300px;
-        }
-
-        .chart-placeholder {
-          width: 100%;
-          height: 100%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-
-        .grid line {
-          stroke-dasharray: 5 5;
-        }
-
-        .y-axis text {
-          font-size: 12px;
-        }
-
-        .positions-container {
-          background-color: #1e1e2e;
-          border-radius: 8px;
-          padding: 24px;
-          border: 1px solid #2a2a3a;
-        }
-
-        .positions-header {
-          margin-bottom: 20px;
-        }
-
-        .positions-header h3 {
-          margin: 0;
-          font-size: 18px;
-          color: #cdd6f4;
-          font-weight: 500;
-        }
-
-        .no-positions {
-          text-align: center;
-          color: #94a3b8;
-          padding: 40px;
-        }
-
-        .positions-list {
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
-        }
-
-        .position-item {
-          background-color: #2a2a3a;
-          border-radius: 8px;
-          padding: 16px;
-        }
-
-        .position-info {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-        }
-
-        .stock-info {
-          display: flex;
-          gap: 12px;
-          align-items: center;
-        }
-
-        .stock-code {
-          color: #cdd6f4;
-          font-weight: 500;
-        }
-
-        .stock-name {
-          color: #cdd6f4;
-        }
-
-        .position-details {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-          gap: 12px;
-        }
-
-        .detail-item {
-          display: flex;
-          gap: 8px;
-          align-items: center;
-        }
-
-        .detail-label {
-          color: #94a3b8;
-          font-size: 14px;
-        }
-
-        .detail-value {
-          color: #cdd6f4;
-          font-size: 14px;
-          font-weight: 500;
-        }
-
-        .detail-item.positive .detail-value {
-          color: #a6e3a1;
-        }
-
-        .detail-item.negative .detail-value {
-          color: #f38ba8;
-        }
-        
-        /* 编辑按钮样式 */
-        .edit-btn {
-          background: none;
-          border: none;
-          font-size: 16px;
-          cursor: pointer;
-          padding: 4px;
-          transition: color 0.2s;
-          color: #94a3b8;
-        }
-        
-        .edit-btn:hover {
-          color: #89dceb;
-        }
-        
-        /* 编辑表单样式 */
-        .edit-form {
-          background-color: #1e1e2e;
-          padding: 16px;
-          border-radius: 8px;
-          border: 1px solid #313244;
-          margin-top: 12px;
-        }
-        
-        .form-row {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-          gap: 16px;
-          margin-bottom: 16px;
-        }
-        
-        .form-group {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-        }
-        
-        .form-group label {
-          color: #cdd6f4;
-          font-size: 14px;
-          font-weight: 500;
-        }
-        
-        .form-input {
-          padding: 8px 12px;
-          border: 1px solid #313244;
-          border-radius: 4px;
-          background-color: #2a2a3a;
-          color: #cdd6f4;
-          font-size: 14px;
-          transition: border-color 0.2s;
-        }
-        
-        .form-input:focus {
-          outline: none;
-          border-color: #89dceb;
-        }
-        
-        .form-actions {
-          display: flex;
-          gap: 8px;
-          justify-content: flex-end;
-        }
-        
-        .save-btn {
-          padding: 8px 16px;
-          background-color: #89dceb;
-          color: #1e1e2e;
-          border: 1px solid #89dceb;
-          border-radius: 4px;
-          cursor: pointer;
-          font-size: 14px;
-          font-weight: 500;
-          transition: all 0.2s;
-        }
-        
-        .save-btn:hover {
-          background-color: #a6e3a1;
-          border-color: #a6e3a1;
-        }
-        
-        .cancel-btn {
-          padding: 8px 16px;
-          background-color: #313244;
-          color: #cdd6f4;
-          border: 1px solid #313244;
-          border-radius: 4px;
-          cursor: pointer;
-          font-size: 14px;
-          font-weight: 500;
-          transition: all 0.2s;
-        }
-        
-        .cancel-btn:hover {
-          background-color: #2a2a3a;
-          border-color: #89dceb;
-        }
-      `}</style>
+      </div>
     </div>
   );
 };

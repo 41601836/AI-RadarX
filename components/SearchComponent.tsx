@@ -182,6 +182,11 @@ export default function SearchComponent() {
           value={searchTerm}
           onChange={handleInputChange}
           onFocus={() => setShowDropdown(true)}
+          onKeyPress={(e) => {
+            if (e.key === 'Enter' && filteredStocks.length > 0) {
+              handleStockSelect(filteredStocks[0]);
+            }
+          }}
           disabled={isLoading}
         />
         {isLoading && <div className="search-loading">加载中...</div>}
