@@ -2,7 +2,7 @@
 import { ApiError, ErrorCode } from './errors';
 
 // Tushare API基础配置
-const TUSHARE_BASE_URL = 'http://api.tushare.pro';
+const TUSHARE_BASE_URL = 'https://api.tushare.pro';
 
 // 缓存配置
 const CACHE_EXPIRY_TIME = 3600000; // 1小时，单位：毫秒
@@ -41,7 +41,6 @@ function getTushareToken(): string | null {
   // 仅从TUSHARE_TOKEN获取（服务端可用），客户端不再直接使用Token
   const token = process.env.TUSHARE_TOKEN;
   if (!token) {
-    console.warn('TUSHARE_TOKEN is not configured in server environment variables');
     return null;
   }
   return token;
@@ -119,19 +118,25 @@ export async function checkTushareConnection(): Promise<TushareStatus> {
     } else {
       // 服务端环境：直接请求Tushare API
       const token = getTushareToken();
+      const requestParams = {
+        api_name: 'stock_basic',
+        token,
+        params: { ts_code: '600000.SH' },
+        fields: 'ts_code,name',
+      };
       
       response = await fetch(TUSHARE_BASE_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          api_name: 'stock_basic',
-          token,
-          params: { ts_code: '600000.SH' },
-          fields: 'ts_code,name',
+        body: JSON.stringify(requestParams),
+        // 开发环境下绕过SSL证书验证（生产环境应移除）
+        ...(process.env.NODE_ENV === 'development' && {
+          // 使用类型断言解决TypeScript类型检查问题
+          agent: new (require('https').Agent)({ rejectUnauthorized: false }) as any,
         }),
-      });
+      } as any);
       
       result = await response.json();
     }
@@ -247,18 +252,26 @@ export async function tushareRequest<T>(apiName: string, params: Record<string, 
   }
   
   try {
+    // 构建Tushare API请求参数
+    const requestParams = {
+      api_name: apiName,
+      token,
+      params,
+      fields: '*',
+    };
+    
     const response = await fetch(TUSHARE_BASE_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        api_name: apiName,
-        token,
-        params,
-        fields: '*',
+      body: JSON.stringify(requestParams),
+      // 开发环境下绕过SSL证书验证（生产环境应移除）
+      ...(process.env.NODE_ENV === 'development' && {
+        // 使用类型断言解决TypeScript类型检查问题
+        agent: new (require('https').Agent)({ rejectUnauthorized: false }) as any,
       }),
-    });
+    } as any);
     
     // 处理402(积分不足)错误
     if (response.status === 402) {

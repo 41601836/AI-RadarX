@@ -203,11 +203,11 @@ describe('DTW Sequence Matching Tests', () => {
     const distance1 = calculateDTW({ sequence1, sequence2 });
     expect(distance1).toBeCloseTo(0, 2); // 相同序列距离为0
     
-    const distance2 = calculateDTW({ sequence1, sequence3 });
+    const distance2 = calculateDTW({ sequence1, sequence2: sequence3 });
     expect(distance2).toBeGreaterThan(0);
     expect(distance2).toBeLessThan(5); // 相似序列距离较小
     
-    const distance3 = calculateDTW({ sequence1, sequence4 });
+    const distance3 = calculateDTW({ sequence1, sequence2: sequence4 });
     expect(distance3).toBeGreaterThan(distance2); // 相反序列距离较大
   });
   
@@ -215,11 +215,11 @@ describe('DTW Sequence Matching Tests', () => {
     const similarity1 = calculateDTWSimilarity({ sequence1, sequence2 });
     expect(similarity1).toBeCloseTo(1, 2); // 相同序列相似度为1
     
-    const similarity2 = calculateDTWSimilarity({ sequence1, sequence3 });
+    const similarity2 = calculateDTWSimilarity({ sequence1, sequence2: sequence3 });
     expect(similarity2).toBeGreaterThan(0.5);
     expect(similarity2).toBeLessThan(1);
     
-    const similarity3 = calculateDTWSimilarity({ sequence1, sequence4 });
+    const similarity3 = calculateDTWSimilarity({ sequence1, sequence2: sequence4 });
     expect(similarity3).toBeLessThan(similarity2); // 相反序列相似度较低
   });
 });

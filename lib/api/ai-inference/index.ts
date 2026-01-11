@@ -61,7 +61,7 @@ export interface AIAnalysisResult {
  * @param stockCode 股票代码
  * @returns 聚合的股票数据
  */
-export async function getAggregatedStockData(stockCode: string): Promise<AggregatedStockData> {
+export async function fetchAggregatedStockData(stockCode: string): Promise<AggregatedStockData> {
   // 参数验证
   if (!stockCode || !/^(SH|SZ)\d{6}$/.test(stockCode)) {
     throw stockCodeFormatError('股票代码格式错误');
@@ -129,7 +129,7 @@ export async function getAISmartAnalysis(stockCode: string): Promise<AIAnalysisR
 
   try {
     // 获取聚合数据
-    const aggregatedData = await getAggregatedStockData(stockCode);
+    const aggregatedData = await fetchAggregatedStockData(stockCode);
 
     // 调用大模型接口（这里是预留位置）
     const analysisResult = await callAIModel(aggregatedData);

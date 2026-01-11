@@ -1,7 +1,8 @@
 // 数据健康状态组件
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { usePolling } from '../lib/hooks/usePolling';
 import { checkTushareConnection, TushareStatus } from '../lib/api/common/tushare';
 
 // 数据源类型
@@ -54,16 +55,6 @@ export default function DataHealth({ currentDataSource: externalDataSource }: Da
     },
     currentDataSource: 'Mock'
   });
-
-  useEffect(() => {
-    // 初始检查连接状态
-    checkConnection();
-
-    // 每30秒检查一次连接状态
-    const interval = setInterval(checkConnection, 30000);
-
-    return () => clearInterval(interval);
-  }, []);
 
   const checkConnection = async () => {
     try {
@@ -125,6 +116,18 @@ export default function DataHealth({ currentDataSource: externalDataSource }: Da
       }));
     }
   };
+
+  // 初始检查连接状态
+  React.useEffect(() => {
+    checkConnection();
+  }, []);
+
+  // 使用usePolling钩子替代setInterval，实现休眠模式
+  usePolling(checkConnection, {
+    interval: 30000, // 每30秒检查一次
+    tabKey: 'dashboard', // 仅在仪表盘页面运行
+    immediate: false // 不立即执行，依赖上面的初始加载
+  });
 
   // 检查免费行情接口连接（模拟实现）
   const checkFreeScannerConnection = async (): Promise<DataHealthStatus['freeScanner']> => {

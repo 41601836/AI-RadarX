@@ -29,8 +29,6 @@ const Strategy: React.FC = () => {
           text-align: center;
           padding: 48px;
           background: #1e1e2e;
-          border-radius: 12px;
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
           border: 1px solid #313244;
         }
 
@@ -61,7 +59,6 @@ const Strategy: React.FC = () => {
         .loading-indicator span {
           width: 12px;
           height: 12px;
-          border-radius: 50%;
           background-color: #89dceb;
           animation: loading 1.4s infinite ease-in-out both;
         }

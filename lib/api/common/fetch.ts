@@ -18,7 +18,7 @@ export interface MockDataGenerator<T> {
 }
 
 // 基础API URL
-export const BASE_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api'; // 使用Next.js默认的API路径
+export const BASE_API_URL = '/api'; // 使用相对路径
 
 // 获取认证Token
 export function getAuthToken(): string | null {
@@ -46,25 +46,24 @@ export async function apiRequest<T>(
   config: ApiRequestConfig = {},
   mockGenerator?: MockDataGenerator<T>
 ): Promise<ApiResponse<T>> {
-  // 强制mock模式逻辑：如果环境变量NEXT_PUBLIC_API_MOCK为true，直接返回Mock，禁止执行任何fetch
-  if (process.env.NEXT_PUBLIC_API_MOCK === 'true') {
-    console.log(`[Mock Mode] Intercepting request to: ${BASE_API_URL}${endpoint}`);
+  // 强制mock模式逻辑：如果环境变量MOCK=true，直接返回Mock，禁止执行任何fetch
+  // 确保在客户端环境下检查，避免服务端渲染时的问题
+  const isClient = typeof window !== 'undefined';
+  const shouldForceMock = isClient && process.env.MOCK === 'true';
+  
+  // 优先使用MOCK环境变量，兼容原有NEXT_PUBLIC_API_MOCK
+  const shouldUseLegacyMock = isClient && !shouldForceMock && process.env.NEXT_PUBLIC_API_MOCK === 'true';
+  
+  if (shouldForceMock || shouldUseLegacyMock) {
+    console.log(`[FORCE MOCK MODE] Intercepting ALL requests to: ${BASE_API_URL}${endpoint}`);
     
-    // 使用现有的mock逻辑处理请求
+    // 解构配置参数
     const {
       method = 'GET',
-      headers = {},
-      body,
-      requiresAuth = true,
-      mockDelay = 500,
+      mockDelay = 300, // 减少默认延迟以提高开发体验
       params,
+      body
     } = config;
-
-    // 确保使用mock模式
-    const useMock = true;
-
-    // 构建请求URL
-    const url = `${BASE_API_URL}${endpoint}`;
 
     // 模拟网络延迟
     await simulateDelay(mockDelay);
@@ -93,18 +92,57 @@ export async function apiRequest<T>(
         return {
           code: 200,
           msg: 'mock data generated with warning',
-          data: {} as T,
+          data: ({} as any) as T, // 确保类型安全
           requestId,
           timestamp: Date.now(),
         } as ApiResponse<T>;
       }
     } else {
-      // 如果没有提供Mock生成器但启用了Mock模式，返回默认响应
+      // 根据不同的endpoint提供更有意义的默认mock响应
+      let defaultData: any = {};
+      let defaultMsg = 'mock mode enabled - default response';
+      
+      // 根据endpoint类型提供不同的默认数据
+      if (endpoint.includes('stock_basic')) {
+        defaultData = {
+          list: [],
+          total: 0,
+          pageNum: 1,
+          pageSize: 20,
+          pages: 0
+        };
+        defaultMsg = 'mock mode - stock basic data';
+      } else if (endpoint.includes('kline')) {
+        defaultData = {
+          data: []
+        };
+        defaultMsg = 'mock mode - kline data';
+      } else if (endpoint.includes('chip')) {
+        defaultData = {
+          distribution: [],
+          trend: []
+        };
+        defaultMsg = 'mock mode - chip data';
+      } else if (endpoint.includes('alerts')) {
+        defaultData = {
+          list: [],
+          total: 0
+        };
+        defaultMsg = 'mock mode - alerts data';
+      } else if (endpoint.includes('wad')) {
+        defaultData = {
+          value: 0,
+          data: []
+        };
+        defaultMsg = 'mock mode - wad indicator data';
+      }
+      
+      // 生成唯一请求ID
       const requestId = `req-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
       return {
         code: 200,
-        msg: 'mock mode enabled but no mock generator provided',
-        data: {} as T,
+        msg: defaultMsg,
+        data: defaultData as T,
         requestId,
         timestamp: Date.now(),
       } as ApiResponse<T>;
@@ -199,35 +237,35 @@ export async function apiRequest<T>(
     // 发送请求
     const response = await fetch(url, requestOptions);
 
-    // 解析响应
-    const data = await response.json();
+    // 检查响应内容类型
+    const contentType = response.headers.get('content-type');
+    let data: any;
 
-    // 检查HTTP状态码
     if (!response.ok) {
-      // 尝试从响应中获取错误码
-      const errorCode = (data.code as ErrorCode) || ErrorCode.INTERNAL_SERVER_ERROR;
-      const errorMessage = data.msg || `HTTP error! status: ${response.status}`;
-      
-      // 如果配置了Mock生成器，实现静默回退
-      if (mockGenerator) {
-        console.warn(`API请求失败，静默回退到Mock数据: ${errorMessage}`);
-        try {
-          const mockData = await mockGenerator(config.method === 'GET' ? config.params : undefined, body);
-          const requestId = `req-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
-          return {
-            code: 200,
-            msg: 'api fallback to mock',
-            data: mockData,
-            requestId,
-            timestamp: Date.now(),
-          } as ApiResponse<T>;
-        } catch (mockError) {
-          console.error('Mock数据回退失败:', mockError);
+      // 如果响应不是OK，检查是否为JSON
+      if (contentType && contentType.includes('application/json')) {
+        // 如果是JSON，尝试解析
+        data = await response.json();
+        const errorCode = (data.code as ErrorCode) || ErrorCode.INTERNAL_SERVER_ERROR;
+        const errorMessage = data.msg || `HTTP error! status: ${response.status}`;
+        console.error(`API请求失败: ${errorMessage}`);
+        throw new ApiError(errorCode, errorMessage);
+      } else {
+        // 如果不是JSON，直接获取文本并抛出错误
+        const text = await response.text();
+        // 检查是否以"Internal"开头
+        if (text.startsWith('Internal')) {
+          console.error(`API请求失败: ${text}`);
+          throw new ApiError(ErrorCode.INTERNAL_SERVER_ERROR, text);
         }
+        // 其他非JSON错误
+        console.error(`API请求失败: HTTP error! status: ${response.status}, text: ${text}`);
+        throw new ApiError(ErrorCode.INTERNAL_SERVER_ERROR, `HTTP error! status: ${response.status}`);
       }
-      
-      throw new ApiError(errorCode, errorMessage);
     }
+
+    // 如果响应是OK的，解析JSON
+    data = await response.json();
 
     // 确保返回的数据结构完整
     if (!data.requestId) {
@@ -242,62 +280,16 @@ export async function apiRequest<T>(
   } catch (error) {
     // 网络错误或其他错误处理
     if (error instanceof ApiError) {
-      // 如果配置了Mock生成器，实现静默回退
-      if (mockGenerator) {
-        console.warn(`API请求失败，静默回退到Mock数据: ${error.message}`);
-        try {
-          const mockData = await mockGenerator(config.method === 'GET' ? config.params : undefined, body);
-          const requestId = `req-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
-          return {
-            code: 200,
-            msg: 'api fallback to mock',
-            data: mockData,
-            requestId,
-            timestamp: Date.now(),
-          } as ApiResponse<T>;
-        } catch (mockError) {
-          console.error('Mock数据回退失败:', mockError);
-        }
-      }
+      // 移除静默回退逻辑，直接抛出错误
+      console.error(`API请求失败: ${error.message}`);
       throw error;
     } else if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-      // 网络错误（包括ERR_CONNECTION_REFUSED），实现静默失败策略
-      if (mockGenerator) {
-        console.warn('服务连接失败（ERR_CONNECTION_REFUSED），静默回退到Mock数据');
-        try {
-          const mockData = await mockGenerator(config.method === 'GET' ? config.params : undefined, body);
-          const requestId = `req-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
-          return {
-            code: 200,
-            msg: 'network fallback to mock',
-            data: mockData,
-            requestId,
-            timestamp: Date.now(),
-          } as ApiResponse<T>;
-        } catch (mockError) {
-          console.error('Mock数据回退失败:', mockError);
-        }
-      }
-      // 如果没有提供mockGenerator，仍然抛出异常
+      // 网络错误（包括ERR_CONNECTION_REFUSED），直接抛出错误
+      console.error('服务连接失败（ERR_CONNECTION_REFUSED）:', error);
       throw new ApiError(ErrorCode.SERVICE_UNAVAILABLE, '服务连接失败，请检查网络');
     } else {
-      // 其他错误，尝试静默回退
-      if (mockGenerator) {
-        console.warn('服务端内部错误，静默回退到Mock数据');
-        try {
-          const mockData = await mockGenerator(config.method === 'GET' ? config.params : undefined, body);
-          const requestId = `req-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
-          return {
-            code: 200,
-            msg: 'internal error fallback to mock',
-            data: mockData,
-            requestId,
-            timestamp: Date.now(),
-          } as ApiResponse<T>;
-        } catch (mockError) {
-          console.error('Mock数据回退失败:', mockError);
-        }
-      }
+      // 其他错误，直接抛出错误
+      console.error('服务端内部错误:', error);
       throw new ApiError(ErrorCode.INTERNAL_SERVER_ERROR, '服务端内部错误', error as Error);
     }
   }

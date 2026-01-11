@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { apiHandler } from '../../../../../lib/api/common/handler';
-import { errorResponse, badRequestError } from '../../../../../lib/api/common/errors';
-import { updateRiskStopRuleConfig } from '../../../../../lib/api/risk/stopRule';
+import { apiHandler } from '@/lib/api/common/handler';
+import { errorResponse, badRequestError } from '@/lib/api/common/errors';
+import { configureStopRule } from '@/lib/api/risk/stopRule';
 
 
 /**
@@ -14,7 +14,7 @@ async function handleRiskStopRuleConfigRequest(request: NextRequest) {
   const body = await request.json();
   
   // 调用业务逻辑
-  const result = await updateRiskStopRuleConfig(body);
+  const result = await configureStopRule(body);
   
   return result;
 }

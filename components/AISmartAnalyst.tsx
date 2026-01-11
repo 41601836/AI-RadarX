@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { getAISmartAnalysis, AIAnalysisResult } from '../lib/api/ai-inference';
+import { getAISmartAnalysis, AIAnalysisResult } from '../lib/api/ai-inference/index';
 import { ApiError } from '../lib/api/common/errors';
 
 interface AISmartAnalystProps {

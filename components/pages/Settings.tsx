@@ -143,8 +143,9 @@ const Settings: React.FC = () => {
               </div>
             </div>
             
-            <button type="submit" className="submit-btn">
+            <button type="submit" className="submit-btn" title="保存设置 (Ctrl+S)">
               保存设置
+              <span className="shortcut">(Ctrl+S)</span>
             </button>
           </form>
         </div>
@@ -253,7 +254,6 @@ const Settings: React.FC = () => {
 
         .settings-panel {
           background-color: #1e1e2e;
-          border-radius: 8px;
           padding: 24px;
           border: 1px solid #2a2a3a;
         }
@@ -274,7 +274,6 @@ const Settings: React.FC = () => {
           border: 1px solid #a6e3a1;
           color: #a6e3a1;
           padding: 12px;
-          border-radius: 4px;
           margin-bottom: 16px;
           font-size: 14px;
         }
@@ -306,7 +305,6 @@ const Settings: React.FC = () => {
         .form-input {
           padding: 10px 12px;
           border: 1px solid #313244;
-          border-radius: 4px;
           background-color: #2a2a3a;
           color: #cdd6f4;
           font-size: 14px;
@@ -321,7 +319,6 @@ const Settings: React.FC = () => {
         .submit-btn {
           padding: 12px;
           border: none;
-          border-radius: 4px;
           background-color: #89dceb;
           color: #1e1e2e;
           font-size: 16px;
@@ -415,7 +412,6 @@ const Settings: React.FC = () => {
           bottom: 0;
           background-color: #313244;
           transition: .4s;
-          border-radius: 24px;
         }
 
         .slider:before {
@@ -427,7 +423,6 @@ const Settings: React.FC = () => {
           bottom: 4px;
           background-color: white;
           transition: .4s;
-          border-radius: 50%;
         }
 
         input:checked + .slider {

@@ -6,6 +6,7 @@ import { formatDateTime } from '../common/utils';
 
 // 定义参数接口
 export interface RiskAccountAssessmentParams {
+  stockCode?: string;
 }
 
 // 定义响应数据接口

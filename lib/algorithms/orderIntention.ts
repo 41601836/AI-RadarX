@@ -196,29 +196,73 @@ export function identifyOrderIntention(
   supportResistance: SupportResistanceLevels,
   currentPrice: number
 ): IntentionSignal {
-  // 计算相关指标
-  const largeOrderRatio = largeOrderStats.largeOrderRatio;
-  const totalAmount = largeOrderStats.totalAmount;
-  const netInflow = largeOrderStats.netInflow;
+  // 防御性编程：确保所有必要参数都存在
+  if (!largeOrderResults || !Array.isArray(largeOrderResults)) {
+    largeOrderResults = [];
+  }
+  
+  if (!largeOrderStats || typeof largeOrderStats !== 'object') {
+    largeOrderStats = {
+      totalOrders: 0,
+      largeOrders: 0,
+      extraLargeOrders: 0,
+      totalAmount: 0,
+      largeOrderAmount: 0,
+      largeOrderRatio: 0,
+      netInflow: 0,
+      orderPower: { buyAmount: 0, sellAmount: 0, buyRatio: 0, sellRatio: 0 }
+    } as LargeOrderStatistics;
+  }
+  
+  if (!supportResistance || typeof supportResistance !== 'object') {
+    supportResistance = {
+      supportLevels: [],
+      resistanceLevels: [],
+      strongestSupport: null,
+      strongestResistance: null,
+      supportResistanceRatio: 0
+    } as SupportResistanceLevels;
+  }
+  
+  // 确保当前价格有效
+  if (isNaN(currentPrice) || !isFinite(currentPrice)) {
+    currentPrice = 0;
+  }
+  
+  // 计算相关指标（确保所有指标都有合理默认值）
+  const largeOrderRatio = largeOrderStats.largeOrderRatio || 0;
+  const totalAmount = largeOrderStats.totalAmount || 0;
+  const netInflow = largeOrderStats.netInflow || 0;
   const netInflowRatio = totalAmount > 0 ? Math.abs(netInflow) / totalAmount : 0;
   
   // 计算价格位置（相对于最近的支撑位和压力位）
   let pricePosition = 0.5; // 默认中间位置
   
-  if (supportResistance.supportLevels.length > 0 && supportResistance.resistanceLevels.length > 0) {
-    const nearestSupport = supportResistance.supportLevels[0];
-    const nearestResistance = supportResistance.resistanceLevels[0];
-    
-    const priceRange = nearestResistance.price - nearestSupport.price;
-    if (priceRange > 0) {
-      pricePosition = (currentPrice - nearestSupport.price) / priceRange;
+  try {
+    if (supportResistance.supportLevels && supportResistance.supportLevels.length > 0 && 
+        supportResistance.resistanceLevels && supportResistance.resistanceLevels.length > 0) {
+      const nearestSupport = supportResistance.supportLevels[0];
+      const nearestResistance = supportResistance.resistanceLevels[0];
+      
+      if (nearestSupport && nearestResistance && nearestSupport.price && nearestResistance.price) {
+        const priceRange = nearestResistance.price - nearestSupport.price;
+        if (priceRange > 0 && currentPrice > 0) {
+          pricePosition = (currentPrice - nearestSupport.price) / priceRange;
+          // 确保价格位置在合理范围内（0-1）
+          pricePosition = Math.max(0, Math.min(1, pricePosition));
+        }
+      }
+    } else if (supportResistance.supportLevels && supportResistance.supportLevels.length > 0) {
+      // 只有支撑位，价格位置较高
+      pricePosition = 0.8;
+    } else if (supportResistance.resistanceLevels && supportResistance.resistanceLevels.length > 0) {
+      // 只有压力位，价格位置较低
+      pricePosition = 0.2;
     }
-  } else if (supportResistance.supportLevels.length > 0) {
-    // 只有支撑位，价格位置较高
-    pricePosition = 0.8;
-  } else if (supportResistance.resistanceLevels.length > 0) {
-    // 只有压力位，价格位置较低
-    pricePosition = 0.2;
+  } catch (error) {
+    // 如果计算价格位置出错，保持默认值
+    console.warn('计算价格位置时出错:', error);
+    pricePosition = 0.5;
   }
   
   // 计算特大单频率
@@ -230,8 +274,15 @@ export function identifyOrderIntention(
   let strength = 0.0;
   let description = '';
   
+  // 数据量不足时直接返回中性信号
+  if (orderFrequency < 3 || largeOrderRatio < 0.1) {
+    intention = 'unknown';
+    confidence = 0.0;
+    strength = 0.0;
+    description = '[NEUTRAL] 信号扫描中，数据量不足';
+  } 
   // 吸筹：低位大量买入
-  if (netInflow > 0 && pricePosition < 0.3 && largeOrderRatio > 0.6) {
+  else if (netInflow > 0 && pricePosition < 0.3 && largeOrderRatio > 0.6) {
     intention = 'accumulation';
     confidence = Math.min(1.0, (netInflowRatio * 0.6 + (1 - pricePosition) * 0.3 + largeOrderRatio * 0.1));
     strength = Math.min(1.0, confidence * 0.7 + (netInflow > 0 ? 0.3 : 0));
@@ -270,7 +321,7 @@ export function identifyOrderIntention(
     intention = 'unknown';
     confidence = 0.0;
     strength = 0.0;
-    description = '无法明确判断主力意图';
+    description = '[NEUTRAL] 信号扫描中，无法明确判断主力意图';
   }
   
   return {

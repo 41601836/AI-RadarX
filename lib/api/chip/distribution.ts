@@ -20,10 +20,28 @@ export interface ChipPriceRange {
   holderCount: number; // 该区间持仓户数（估算）
 }
 
+export interface ChipPeak {
+  price: number;
+  ratio: number;
+  volume: number;
+  width: number; // 峰值宽度（价格区间）
+  dominance: number; // 峰值优势度（0-1）
+  strength: number; // 峰值强度（0-1）
+  reliability: number; // 峰值可靠性（0-1）
+  centerPrice: number; // 峰值中心价格（考虑加权平均）
+  volumeWeightedPrice: number; // 成交量加权价格
+}
+
 export interface ChipPeakInfo {
   peakPrice: number; // 主峰价格（分）
   peakRatio: number; // 主峰筹码占比（0-1）
   isSinglePeak: boolean; // 是否单峰密集
+  peaks: ChipPeak[]; // 所有峰值
+  dominantPeak: ChipPeak; // 主峰值
+  secondaryPeaks: ChipPeak[]; // 次要峰值
+  peakDensity: number; // 峰值密度
+  peakQualityScore: number; // 峰值质量综合评分（0-1）
+  priceRange: number; // 价格范围
 }
 
 export interface ChipDistributionData {
@@ -158,11 +176,7 @@ function simulateChipDistributionWithWAD(dailyData: any[], stockCode: string, st
     mainCostPrice,
     supportPrice,
     resistancePrice,
-    chipPeakInfo: {
-      peakPrice: peakInfo.peakPrice,
-      peakRatio: peakInfo.peakRatio,
-      isSinglePeak: peakInfo.isSinglePeak
-    }
+    chipPeakInfo: peakInfo
   };
 }
 
@@ -238,11 +252,7 @@ export const generateChipDistributionMock: MockDataGenerator<ChipDistributionDat
     mainCostPrice,
     supportPrice,
     resistancePrice,
-    chipPeakInfo: {
-      peakPrice: peakInfo.peakPrice,
-      peakRatio: peakInfo.peakRatio,
-      isSinglePeak: peakInfo.isSinglePeak
-    }
+    chipPeakInfo: peakInfo
   };
 };
 

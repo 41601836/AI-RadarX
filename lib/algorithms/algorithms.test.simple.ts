@@ -177,7 +177,7 @@ if (assertCloseTo(distance1, 0, 2, 'calculateDTW 相同序列距离为0')) {
 }
 
 totalTests++;
-const distance2 = calculateDTW({ sequence1, sequence3 });
+const distance2 = calculateDTW({ sequence1, sequence2: sequence3 });
 if (assert(distance2 > 0 && distance2 < 5, 'calculateDTW 相似序列距离较小')) {
   passedTests++;
 }

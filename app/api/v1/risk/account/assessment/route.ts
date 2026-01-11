@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { apiHandler } from '../../../../../lib/api/common/handler';
-import { errorResponse, badRequestError } from '../../../../../lib/api/common/errors';
-import { fetchRiskAccountAssessment } from '../../../../../lib/api/risk/assessment';
+import { apiHandler } from '@/lib/api/common/handler';
+import { errorResponse, badRequestError } from '@/lib/api/common/errors';
+import { fetchAccountRiskAssessment } from '@/lib/api/risk/assessment';
 
 
 /**
@@ -16,8 +16,7 @@ async function handleRiskAccountAssessmentRequest(request: NextRequest) {
 
 
   // 调用业务逻辑
-  const result = await fetchRiskAccountAssessment({
-  });
+  const result = await fetchAccountRiskAssessment();
   
   return result;
 }

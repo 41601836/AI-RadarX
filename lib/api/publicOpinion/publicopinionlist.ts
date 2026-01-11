@@ -23,31 +23,46 @@ export interface PublicOpinionItem {
 }
 
 // Mock数据生成器
-export const generatePublicOpinionListMock: MockDataGenerator<PublicOpinionItem> = async (params: PublicOpinionListParams) => {
-  const { stockCode = 'SH600000' } = params || {};
+export const generatePublicOpinionListMock: MockDataGenerator<PaginationResponse<PublicOpinionItem>> = async (params: PublicOpinionListParams) => {
+  const { stockCode = 'SH600000', pageNum = 1, pageSize = 20 } = params || {};
   
   // 模拟股票名称
   const stockNameMap: Record<string, string> = {
     'SH600000': '浦发银行',
-    'SH600036': '招商银行',
     'SZ000001': '平安银行',
+    'SH600036': '招商银行',
     'SZ000858': '五粮液',
     'SZ002594': '比亚迪',
   };
   
   const stockName = stockNameMap[stockCode] || '未知股票';
   
-  // 生成当前时间
-  const now = new Date();
-  const date = formatDateTime(now);
+  // 生成多条模拟数据
+  const mockItems: PublicOpinionItem[] = [];
+  const total = 50; // 总数据量
+  const startIndex = (pageNum - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, total);
   
-  // TODO: 实现具体的模拟数据生成逻辑
+  for (let i = startIndex; i < endIndex; i++) {
+    // 生成当前时间
+    const now = new Date();
+    now.setDate(now.getDate() - Math.floor(Math.random() * 30)); // 随机过去30天内的日期
+    const date = formatDateTime(now);
+    
+    mockItems.push({
+      stockCode,
+      stockName,
+      date
+      // 添加更多字段...
+    });
+  }
+  
   return {
-    // 基础模拟数据结构
-    stockCode,
-    stockName,
-    date
-    // 添加更多字段...
+    list: mockItems,
+    total,
+    pageNum,
+    pageSize,
+    pages: Math.ceil(total / pageSize)
   };
 };
 
@@ -62,7 +77,7 @@ export async function fetchPublicOpinionList(
     if (process.env.NEXT_PUBLIC_API_MOCK === 'true') {
       console.info('Mock mode enabled, using mock data directly');
       dataSource = 'Mock';
-      return apiGet<PublicOpinionItem>(
+      return apiGet<PaginationResponse<PublicOpinionItem>>(
         '/public/opinion/list',
         params,
         { requiresAuth: false },
@@ -73,7 +88,7 @@ export async function fetchPublicOpinionList(
     // 2. 尝试调用本地后端API
     try {
       console.info('Trying to fetch from local backend API');
-      const response = await apiGet<PublicOpinionItem>(
+      const response = await apiGet<PaginationResponse<PublicOpinionItem>>(
         '/public/opinion/list',
         params,
         { requiresAuth: false }
@@ -94,7 +109,7 @@ export async function fetchPublicOpinionList(
   
   // 最终回退到模拟数据
   console.info('All data sources failed, using mock data');
-  const mockResponse = await apiGet<PublicOpinionItem>(
+  const mockResponse = await apiGet<PaginationResponse<PublicOpinionItem>>(
     '/public/opinion/list',
     params,
     { requiresAuth: false },

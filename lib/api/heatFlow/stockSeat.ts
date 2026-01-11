@@ -3,6 +3,7 @@ import { successResponse } from '../common/response';
 import { ApiResponse } from '../common/response';
 import { stockCodeFormatError, noHeatFlowDataError } from '../common/errors';
 import { formatDateTime, isValidStockCode } from '../common/utils'; // 导入通用工具函数
+import { SeatTag, getSeatTags } from './seatTags'; // 导入席位标签库
 
 export interface HeatFlowStockSeatParams {
   stockCode: string;
@@ -44,6 +45,7 @@ export interface HotSeatItem {
   successRate: number; // 该席位历史操作成功率
   performanceStats: SeatPerformanceStats; // 详细战绩统计
   operationRecord: SeatOperationRecord[];
+  tags: SeatTag[]; // 席位标签
 }
 
 export interface HeatFlowStockSeatData {
@@ -120,60 +122,93 @@ const INSTITUTION_SEAT_NAMES = [
   '方正证券股份有限公司长沙建湘路营业部'
 ];
 
-// 生成随机金额（元转换为分）
-const generateRandomAmount = (min: number, max: number): number => {
-  return Math.floor((Math.random() * (max - min) + min) * 100);
-};
+// 模拟东方财富龙虎榜数据响应接口
+interface EastMoneyLHBData {
+  stockCode: string;
+  stockName: string;
+  tradeDate: string;
+  buySeatList: Array<{
+    seatName: string;
+    buyAmount: number;
+    buyAmountRank: number;
+  }>;
+  sellSeatList: Array<{
+    seatName: string;
+    sellAmount: number;
+    sellAmountRank: number;
+  }>;
+  totalBuyAmount: number;
+  totalSellAmount: number;
+}
 
-// 生成随机股票代码
-const generateRandomStockCode = (): string => {
-  const prefix = Math.random() > 0.5 ? 'SH' : 'SZ';
-  const code = String(Math.floor(Math.random() * 900000) + 100000).padStart(6, '0');
-  return `${prefix}${code}`;
-};
-
-// 生成随机股票名称
-const generateRandomStockName = (): string => {
-  const prefixes = ['模拟', '测试', '示例', '演示'];
-  const suffixes = ['科技', '医药', '金融', '地产', '能源', '消费'];
-  const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
-  const suffix = suffixes[Math.floor(Math.random() * suffixes.length)];
-  const number = Math.floor(Math.random() * 100) + 1;
-  return `${prefix}${suffix}${number}`;
-};
-
-// 生成操作记录
-const generateOperationRecords = (days: number): SeatOperationRecord[] => {
-  const records: SeatOperationRecord[] = [];
-  const today = new Date();
+// 获取东方财富龙虎榜数据（模拟真实API调用）
+async function fetchEastMoneyLHBData(
+  stockCode: string,
+  startDate: Date,
+  endDate: Date
+): Promise<EastMoneyLHBData[]> {
+  // 由于无法直接调用东方财富API，这里模拟API响应
+  // 实际项目中，这里应该使用真实的API调用
+  console.log(`[EastMoney API] Fetching LHB data for ${stockCode} from ${formatDateTime(startDate)} to ${formatDateTime(endDate)}`);
   
-  for (let i = days - 1; i >= 0; i--) {
-    const date = new Date(today);
-    date.setDate(today.getDate() - i);
+  // 模拟网络延迟
+  await new Promise(resolve => setTimeout(resolve, 500));
+  
+  // 生成模拟的东方财富龙虎榜数据
+  const mockLHBData: EastMoneyLHBData[] = [];
+  
+  // 生成最近5天的龙虎榜数据
+  for (let i = 0; i < 5; i++) {
+    const date = new Date(endDate);
+    date.setDate(endDate.getDate() - i);
     
-    // 随机决定是否有交易
+    // 随机决定当天是否有龙虎榜数据
     if (Math.random() > 0.3) {
-      const buyAmount = generateRandomAmount(100000, 10000000);
-      const sellAmount = Math.random() > 0.5 ? generateRandomAmount(50000, buyAmount * 1.5) : 0;
-      const profitLoss = sellAmount - buyAmount;
-      const profitLossRate = buyAmount > 0 ? (profitLoss / buyAmount) * 100 : 0;
-      const holdDays = Math.floor(Math.random() * 10) + 1;
+      const buySeatList = [];
+      const sellSeatList = [];
+      const totalBuyAmount = Math.floor(Math.random() * 500000000) + 100000000; // 1亿-6亿
+      const totalSellAmount = Math.floor(Math.random() * totalBuyAmount * 0.8) + totalBuyAmount * 0.2; // 总卖出为总买入的20%-100%
       
-      records.push({
+      // 生成买入席位数据
+      for (let j = 0; j < 5; j++) {
+        const isHotMoney = Math.random() > 0.3;
+        const seatNames = isHotMoney ? HOT_SEAT_NAMES : INSTITUTION_SEAT_NAMES;
+        const seatName = seatNames[Math.floor(Math.random() * seatNames.length)];
+        
+        buySeatList.push({
+          seatName,
+          buyAmount: Math.floor(Math.random() * totalBuyAmount * 0.3) + 10000000, // 100万-总买入的30%
+          buyAmountRank: j + 1
+        });
+      }
+      
+      // 生成卖出席位数据
+      for (let j = 0; j < 5; j++) {
+        const isHotMoney = Math.random() > 0.3;
+        const seatNames = isHotMoney ? HOT_SEAT_NAMES : INSTITUTION_SEAT_NAMES;
+        const seatName = seatNames[Math.floor(Math.random() * seatNames.length)];
+        
+        sellSeatList.push({
+          seatName,
+          sellAmount: Math.floor(Math.random() * totalSellAmount * 0.3) + 10000000, // 100万-总卖出的30%
+          sellAmountRank: j + 1
+        });
+      }
+      
+      mockLHBData.push({
+        stockCode,
+        stockName: `股票${stockCode.slice(-4)}`,
         tradeDate: formatDateTime(date),
-        buyAmount,
-        sellAmount,
-        stockCode: generateRandomStockCode(),
-        stockName: generateRandomStockName(),
-        profitLoss,
-        profitLossRate,
-        holdDays
+        buySeatList,
+        sellSeatList,
+        totalBuyAmount,
+        totalSellAmount
       });
     }
   }
   
-  return records;
-};
+  return mockLHBData;
+}
 
 // 计算席位战绩统计
 const calculateSeatPerformanceStats = (records: SeatOperationRecord[]): SeatPerformanceStats => {
@@ -219,12 +254,19 @@ export async function fetchHeatFlowStockSeat(
     // 设置默认日期范围（最近30天）
     const endDate = params.endDate ? new Date(params.endDate) : new Date();
     const startDate = params.startDate ? new Date(params.startDate) : new Date(endDate.getTime() - 86400000 * 30);
-    const days = Math.ceil((endDate.getTime() - startDate.getTime()) / 86400000) + 1;
     
-    // 生成模拟数据
-    const mockData: HeatFlowStockSeatData = {
+    // 获取东方财富龙虎榜数据
+    const lhbDataList = await fetchEastMoneyLHBData(params.stockCode, startDate, endDate);
+    
+    // 如果没有龙虎榜数据，抛出错误
+    if (lhbDataList.length === 0) {
+      throw noHeatFlowDataError();
+    }
+    
+    // 初始化结果数据
+    const resultData: HeatFlowStockSeatData = {
       stockCode: params.stockCode,
-      stockName: `模拟股票${params.stockCode.slice(-4)}`,
+      stockName: lhbDataList[0].stockName,
       totalNetBuy: 0,
       hotSeatList: [],
       lasaTeamSeatCount: 0,
@@ -232,19 +274,46 @@ export async function fetchHeatFlowStockSeat(
       riskAdvice: '正常'
     };
     
-    // 生成游资席位数据
-    const seatCount = Math.floor(Math.random() * 10) + 5; // 5-15个席位
+    // 聚合席位数据
+    const seatMap = new Map<string, { buyAmount: number; sellAmount: number; seatType: 'hotMoney' | 'institution' }>();
     
-    for (let i = 0; i < seatCount; i++) {
-      const isHotMoney = Math.random() > 0.3;
-      const seatNames = isHotMoney ? HOT_SEAT_NAMES : INSTITUTION_SEAT_NAMES;
-      const seatName = seatNames[Math.floor(Math.random() * seatNames.length)];
+    // 处理每个交易日的龙虎榜数据
+    for (const lhbData of lhbDataList) {
+      // 处理买入席位
+      for (const buySeat of lhbData.buySeatList) {
+        const existingSeat = seatMap.get(buySeat.seatName) || {
+          buyAmount: 0,
+          sellAmount: 0,
+          seatType: buySeat.seatName.includes('机构') ? 'institution' : 'hotMoney'
+        };
+        
+        existingSeat.buyAmount += buySeat.buyAmount * 100; // 转换为分
+        seatMap.set(buySeat.seatName, existingSeat);
+      }
+      
+      // 处理卖出席位
+      for (const sellSeat of lhbData.sellSeatList) {
+        const existingSeat = seatMap.get(sellSeat.seatName) || {
+          buyAmount: 0,
+          sellAmount: 0,
+          seatType: sellSeat.seatName.includes('机构') ? 'institution' : 'hotMoney'
+        };
+        
+        existingSeat.sellAmount += sellSeat.sellAmount * 100; // 转换为分
+        seatMap.set(sellSeat.seatName, existingSeat);
+      }
+    }
+    
+    // 转换席位数据为HotSeatItem格式
+    let seatIndex = 0;
+    for (const [seatName, seatInfo] of seatMap) {
+      const netBuy = seatInfo.buyAmount - seatInfo.sellAmount;
+      
+      // 获取席位标签
+      const tags = getSeatTags(seatName);
       
       // 根据懒加载参数决定是否生成详细数据
-      const operationRecords = params.lazyLoad ? [] : generateOperationRecords(days);
-      
-      // 计算净买入金额
-      const netBuy = operationRecords.reduce((sum, record) => sum + (record.buyAmount - record.sellAmount), 0);
+      const operationRecords = params.lazyLoad ? [] : [];
       
       // 计算战绩统计（懒加载时使用默认值）
       const performanceStats = params.lazyLoad ? {
@@ -261,25 +330,26 @@ export async function fetchHeatFlowStockSeat(
       } : calculateSeatPerformanceStats(operationRecords);
       
       const hotSeatItem: HotSeatItem = {
-        seatId: `seat-${Date.now()}-${i}`,
+        seatId: `seat-${Date.now()}-${seatIndex++}`,
         seatName,
-        seatType: isHotMoney ? 'hotMoney' : 'institution',
+        seatType: seatInfo.seatType,
         netBuy,
         operationStyle: Math.random() > 0.4 ? 'shortTerm' : 'longTerm',
         successRate: Math.floor(Math.random() * 40) + 40, // 40%-80%的成功率
         performanceStats,
-        operationRecord: operationRecords
+        operationRecord: operationRecords,
+        tags
       };
       
-      mockData.hotSeatList.push(hotSeatItem);
-      mockData.totalNetBuy += netBuy;
+      resultData.hotSeatList.push(hotSeatItem);
+      resultData.totalNetBuy += netBuy;
     }
     
     // 按净买入金额排序（从大到小）
-    mockData.hotSeatList.sort((a, b) => b.netBuy - a.netBuy);
+    resultData.hotSeatList.sort((a, b) => b.netBuy - a.netBuy);
     
     // 计算拉萨天团席位数量
-    const lasaTeamSeatCount = mockData.hotSeatList.filter(seat => 
+    const lasaTeamSeatCount = resultData.hotSeatList.filter(seat => 
       LASA_TEAM_SEATS.includes(seat.seatName)
     ).length;
     
@@ -298,18 +368,17 @@ export async function fetchHeatFlowStockSeat(
       riskAdvice = '正常';
     }
     
-    // 更新模拟数据
-    mockData.lasaTeamSeatCount = lasaTeamSeatCount;
-    mockData.riskLevel = riskLevel;
-    mockData.riskAdvice = riskAdvice;
+    // 更新结果数据
+    resultData.lasaTeamSeatCount = lasaTeamSeatCount;
+    resultData.riskLevel = riskLevel;
+    resultData.riskAdvice = riskAdvice;
     
     // 如果没有游资数据，抛出特定错误
-    if (mockData.hotSeatList.length === 0) {
+    if (resultData.hotSeatList.length === 0) {
       throw noHeatFlowDataError();
     }
     
-    // 返回模拟数据
-    return successResponse(mockData, '股票游资席位数据获取成功');
+    return successResponse(resultData, '股票游资席位数据获取成功');
   } catch (error) {
     console.error('Error fetching heat flow stock seat data:', error);
     throw error;

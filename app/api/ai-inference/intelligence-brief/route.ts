@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAggregatedStockData } from '../../../../lib/api/ai-inference';
-import { IntelligenceBriefData } from '../../../../components/IntelligenceBrief';
+import { fetchAggregatedStockData } from '../../../../lib/api/ai-inference/index';
+import { IntelligenceBriefData } from '../../../../lib/api/ai-inference';
 import { successResponse } from '../../../../lib/api/common/response';
 import { errorResponse, badRequestError, internalServerError } from '../../../../lib/api/common/errors';
 import { apiHandler } from '../../../../lib/api/common/handler';
@@ -10,7 +10,7 @@ import { getTushareStockBasic } from '../../../../lib/api/common/tushare';
 async function generateIntelligenceBrief(stockCode: string): Promise<IntelligenceBriefData> {
   try {
     // 获取聚合数据
-    const aggregatedData = await getAggregatedStockData(stockCode);
+    const aggregatedData = await fetchAggregatedStockData(stockCode);
     
     // 从Tushare获取真实的股票基本信息
     const stockBasic = await getTushareStockBasic(stockCode);
@@ -27,6 +27,11 @@ async function generateIntelligenceBrief(stockCode: string): Promise<Intelligenc
         list_date: stockBasic?.list_date || '1999-11-10', // 从Tushare获取，如失败使用默认值
         pinyin: stockBasic?.pinyin || 'pfyh' // 从Tushare获取，如失败使用默认值
       },
+      tags: [
+        { type: 'FININT', description: '金融情报', level: 'high' },
+        { type: 'TECHINT', description: '技术分析', level: 'medium' },
+        { type: 'OSINT', description: '开源情报', level: 'medium' }
+      ],
       selectionLogic: {
         overallScore: Math.round((aggregatedData.chipData.chipConcentrationScore + aggregatedData.sentimentData.opinionScore + aggregatedData.heatFlowData.heatScore) / 3),
         factors: [
@@ -108,6 +113,11 @@ async function generateIntelligenceBrief(stockCode: string): Promise<Intelligenc
         list_date: '1999-11-10',
         pinyin: 'pfyh'
       },
+      tags: [
+        { type: 'FININT', description: '金融情报', level: 'high' },
+        { type: 'TECHINT', description: '技术分析', level: 'medium' },
+        { type: 'OSINT', description: '开源情报', level: 'medium' }
+      ],
       selectionLogic: {
         overallScore: 85,
         factors: [

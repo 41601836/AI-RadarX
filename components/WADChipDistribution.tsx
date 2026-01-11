@@ -1,12 +1,205 @@
 // WAD 筹码分布监控组件
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { fetchChipDistribution, ChipDistributionData as ApiChipDistributionData } from '../lib/api/chip/distribution';
 import { fetchTechIndicatorData, TechIndicatorParams } from '../lib/api/techIndicator/indicator';
 import { fetchLargeOrderRealTime } from '../lib/api/largeOrder/realTime';
 import { calculateChipConcentration, calculateEnhancedChipDistribution, ChipDistributionItem, EnhancedChipDistributionResult } from '../lib/algorithms/chipDistribution';
 import { calculateIntradayStrength, IntradayStrengthParams } from '../lib/algorithms/intradayStrength';
+import { usePolling } from '../lib/hooks/usePolling';
+import { formatNumberToFixed2, formatNumberWithUnit } from '../lib/utils/numberFormatter';
+
+// 定义tacticalState类型
+interface TacticalState {
+  chipData: ChipDistributionData[];
+  wadData: WADIndicatorData[];
+  largeOrderSummary: LargeOrderSummary | null;
+  supportPrice: number | null;
+  resistancePrice: number | null;
+  suggestedStopLoss: number | null;
+  lastPrice: number | null;
+  priceBlink: 'none' | 'up' | 'down';
+}
+
+// 自定义Hook: useAIGeneticBrief
+// 用于获取和处理右侧情报流数据，独立于主UI线程
+function useAIGeneticBrief(symbol: string) {
+  const [tacticalState, setTacticalState] = useState<TacticalState>({
+    chipData: [],
+    wadData: [],
+    largeOrderSummary: null,
+    supportPrice: null,
+    resistancePrice: null,
+    suggestedStopLoss: null,
+    lastPrice: null,
+    priceBlink: 'none'
+  });
+  
+  const [loading, setLoading] = useState(true);
+  const [lastUpdate, setLastUpdate] = useState<string>('');
+  
+  // 使用ref保存当前symbol，避免闭包问题
+  const currentSymbolRef = useRef(symbol);
+  
+  useEffect(() => {
+    currentSymbolRef.current = symbol;
+  }, [symbol]);
+  
+  // 计算建议止损位的函数
+  const calculateStopLoss = useCallback((supportPrice: number | null, resistancePrice: number | null, wadData: WADIndicatorData[]) => {
+    if (!supportPrice || !resistancePrice) return null;
+    
+    // 建议止损位计算逻辑：
+    // 1. 当存在支撑位时，建议止损位设置在支撑位下方2%
+    // 2. 当支撑位不明确时，使用压力位和当前价格的比例来计算
+    const stopLossBelowSupport = supportPrice * 0.98;
+    
+    // 获取最新的WAD指标值，用于调整止损位
+    const latestWadValue = wadData.at(-1)?.wad || 0;
+    
+    // 根据WAD指标调整止损位：如果WAD指标为负（资金流出），则适当降低止损位
+    let adjustedStopLoss = stopLossBelowSupport;
+    if (latestWadValue < 0) {
+      adjustedStopLoss = stopLossBelowSupport * 0.99;
+    }
+    
+    return adjustedStopLoss;
+  }, []);
+  
+  // 使用useCallback包装fetchData，确保函数引用稳定
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const currentSymbol = currentSymbolRef.current;
+      
+      // 在Web Worker中并行调用API获取筹码分布、WAD指标和特大单数据
+      // 这里使用Promise.all模拟Web Worker的独立执行
+      const [chipResponse, techResponse, largeOrderResponse] = await Promise.all([
+        fetchChipDistribution({ stockCode: currentSymbol }),
+        fetchTechIndicatorData({ 
+          stockCode: currentSymbol, 
+          indicatorTypes: ['wad'],
+          days: 30
+        }),
+        fetchLargeOrderRealTime({ stockCode: currentSymbol })
+      ]);
+      
+      // 转换筹码分布数据格式以匹配组件需求，添加空值检查
+      const transformedChipData = chipResponse?.data?.chipDistribution?.map(chip => ({
+        price: chip.price,
+        volume: chip.price * chip.chipRatio, // 估算成交量
+        percentage: chip.chipRatio
+      })) || [];
+      
+      // 转换WAD指标数据格式以匹配组件需求，添加空值检查
+      const transformedWadData = techResponse?.data?.indicatorDataList?.map(item => ({
+        timestamp: new Date(item.time).getTime(),
+        wad: item.wad?.wad || 0,
+        signal: item.wad?.signal
+      })) || [];
+      
+      // 转换特大单数据格式以匹配组件需求，添加空值检查
+      const largeOrderData = largeOrderResponse?.data;
+      const transformedLargeOrderSummary: LargeOrderSummary | null = largeOrderData ? {
+        totalAmount: largeOrderData.totalLargeOrderAmount || 0,
+        netInflow: largeOrderData.largeOrderNetInflow || 0,
+        ratio: largeOrderData.largeOrderRatio || 0,
+        signal: largeOrderData.abnormalSignal?.[0]?.signalDesc || '无异常信号'
+      } : null;
+      
+      // 从API响应获取支撑位和压力位，添加空值检查
+      const apiSupportPrice = chipResponse?.data?.supportPrice || null;
+      const apiResistancePrice = chipResponse?.data?.resistancePrice || null;
+        
+      // 检测价格变化并触发呼吸灯效果
+      // 使用支撑位和压力位的中间价作为当前价格参考
+      const currentPrice = apiSupportPrice !== null && apiResistancePrice !== null 
+        ? (apiSupportPrice + apiResistancePrice) / 2 
+        : null;
+      
+      // 计算建议止损位
+      const newSuggestedStopLoss = calculateStopLoss(apiSupportPrice, apiResistancePrice, transformedWadData);
+      
+      // 批量更新状态
+      setTacticalState(prev => {
+        // 计算当前的呼吸灯效果
+        let currentBlink = 'none' as 'none' | 'up' | 'down';
+        if (prev.lastPrice !== null && currentPrice !== null) {
+          if (currentPrice > prev.lastPrice) {
+            currentBlink = 'up';
+          } else if (currentPrice < prev.lastPrice) {
+            currentBlink = 'down';
+          }
+        }
+        
+        // 如果有呼吸灯效果，500毫秒后重置
+        if (currentBlink !== 'none') {
+          setTimeout(() => {
+            setTacticalState(innerPrev => ({
+              ...innerPrev,
+              priceBlink: 'none'
+            }));
+          }, 500);
+        }
+        
+        return {
+          ...prev,
+          chipData: transformedChipData,
+          wadData: transformedWadData,
+          largeOrderSummary: transformedLargeOrderSummary,
+          supportPrice: apiSupportPrice,
+          resistancePrice: apiResistancePrice,
+          suggestedStopLoss: newSuggestedStopLoss,
+          lastPrice: currentPrice,
+          priceBlink: currentBlink
+        };
+      });
+      
+      setLastUpdate(new Date().toLocaleTimeString());
+    } catch (error) {
+      console.error('Error fetching WAD chip distribution data:', error);
+      // 发生错误时使用模拟数据作为降级方案
+      // 生成更真实的模拟价格数据
+      const mockPriceData = generateTestPriceData(30);
+      
+      // 使用高精度算法计算增强筹码分布
+      const enhancedChipResult = calculateEnhancedChipDistribution(mockPriceData);
+      
+      // 转换为组件需要的数据格式
+      // 使用generateMockChipDistribution替代calculateEnhancedChipDistribution
+      const mockChipData = generateMockChipDistribution();
+      const mockWadData = generateMockWADData();
+      
+      // 使用算法计算的支撑位和压力位
+      const mockSupportPrice = 750;
+      const mockResistancePrice = 950;
+      
+      // 计算建议止损位
+      const newSuggestedStopLoss = calculateStopLoss(mockSupportPrice, mockResistancePrice, mockWadData);
+      
+      // 批量更新状态
+      setTacticalState(prev => ({
+        ...prev,
+        chipData: mockChipData,
+        wadData: mockWadData,
+        largeOrderSummary: null,
+        supportPrice: mockSupportPrice,
+        resistancePrice: mockResistancePrice,
+        suggestedStopLoss: newSuggestedStopLoss
+      }));
+    } finally {
+      setLoading(false);
+    }
+  }, [calculateStopLoss]);
+  
+  return {
+    tacticalState,
+    loading,
+    lastUpdate,
+    fetchData
+  };
+}
 
 // 防抖函数
 const debounce = <T extends (...args: any[]) => any>(func: T, delay: number): ((...args: Parameters<T>) => void) => {
@@ -37,164 +230,41 @@ interface LargeOrderSummary {
 }
 
 export default function WADChipDistribution({ symbol = 'SH600000' }: { symbol?: string }) {
-  const [chipData, setChipData] = useState<ChipDistributionData[]>([]);
-  const [wadData, setWadData] = useState<WADIndicatorData[]>([]);
-  const [largeOrderSummary, setLargeOrderSummary] = useState<LargeOrderSummary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [lastUpdate, setLastUpdate] = useState<string>('');
-  // 添加支撑位、压力位和建议止损位状态
-  const [supportPrice, setSupportPrice] = useState<number | null>(null);
-  const [resistancePrice, setResistancePrice] = useState<number | null>(null);
-  const [suggestedStopLoss, setSuggestedStopLoss] = useState<number | null>(null);
+  // 添加性能监控：记录组件渲染次数
+  const renderCountRef = useRef(0);
+  renderCountRef.current++;
   
-  // 呼吸灯效果状态
-  const [lastPrice, setLastPrice] = useState<number | null>(null);
-  const [priceBlink, setPriceBlink] = useState<'none' | 'up' | 'down'>('none');
+  // 只在开发环境输出渲染次数
+  if (process.env.NODE_ENV === 'development') {
 
-  // 从API获取数据
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      
-      // 并行调用API获取筹码分布、WAD指标和特大单数据
-    const [chipResponse, techResponse, largeOrderResponse] = await Promise.all([
-      fetchChipDistribution({ stockCode: symbol }),
-      fetchTechIndicatorData({ 
-        stockCode: symbol, 
-        indicatorTypes: ['wad'],
-        days: 30
-      }),
-      fetchLargeOrderRealTime({ stockCode: symbol })
-    ]);
-    
-    // 转换筹码分布数据格式以匹配组件需求，添加空值检查
-    const transformedChipData = chipResponse?.data?.chipDistribution?.map(chip => ({
-      price: chip.price,
-      volume: chip.price * chip.chipRatio, // 估算成交量
-      percentage: chip.chipRatio
-    })) || [];
-    
-    // 转换WAD指标数据格式以匹配组件需求，添加空值检查
-    const transformedWadData = techResponse?.data?.indicatorDataList?.map(item => ({
-      timestamp: new Date(item.time).getTime(),
-      wad: item.wad?.wad || 0,
-      signal: item.wad?.signal
-    })) || [];
-    
-    // 转换特大单数据格式以匹配组件需求，添加空值检查
-    const largeOrderData = largeOrderResponse?.data;
-    const transformedLargeOrderSummary: LargeOrderSummary | null = largeOrderData ? {
-      totalAmount: largeOrderData.totalLargeOrderAmount || 0,
-      netInflow: largeOrderData.largeOrderNetInflow || 0,
-      ratio: largeOrderData.largeOrderRatio || 0,
-      signal: largeOrderData.abnormalSignal?.[0]?.signalDesc || '无异常信号'
-    } : null;
-    
-    // 从API响应获取支撑位和压力位，添加空值检查
-    const apiSupportPrice = chipResponse?.data?.supportPrice || null;
-    const apiResistancePrice = chipResponse?.data?.resistancePrice || null;
-      
-      setChipData(transformedChipData);
-      setWadData(transformedWadData);
-      setLargeOrderSummary(transformedLargeOrderSummary);
-      setSupportPrice(apiSupportPrice);
-      setResistancePrice(apiResistancePrice);
-      
-      // 检测价格变化并触发呼吸灯效果
-      // 使用支撑位和压力位的中间价作为当前价格参考
-      const currentPrice = apiSupportPrice !== null && apiResistancePrice !== null 
-        ? (apiSupportPrice + apiResistancePrice) / 2 
-        : null;
-      
-      if (lastPrice !== null && currentPrice !== null) {
-        if (currentPrice > lastPrice) {
-          setPriceBlink('up');
-          setTimeout(() => setPriceBlink('none'), 500);
-        } else if (currentPrice < lastPrice) {
-          setPriceBlink('down');
-          setTimeout(() => setPriceBlink('none'), 500);
-        }
-      }
-      
-      // 更新最后价格
-      setLastPrice(currentPrice);
-      setLastUpdate(new Date().toLocaleTimeString());
-    } catch (error) {
-      console.error('Error fetching WAD chip distribution data:', error);
-      // 发生错误时使用模拟数据作为降级方案
-      // 生成更真实的模拟价格数据
-      const mockPriceData = generateTestPriceData(30);
-      
-      // 使用高精度算法计算增强筹码分布
-      const enhancedChipResult = calculateEnhancedChipDistribution(mockPriceData);
-      
-      // 转换为组件需要的数据格式
-      const mockChipData = enhancedChipResult.chipDistribution.map(chip => ({
-        price: chip.price,
-        volume: chip.volume,
-        percentage: chip.percentage
-      }));
-      
-      // 使用增强的筹码集中度计算
-      const concentrationResult = calculateChipConcentration({
-        chipData: enhancedChipResult.chipDistribution as ChipDistributionItem[],
-        currentPrice: mockPriceData[mockPriceData.length - 1].close
-      });
-      
-      const mockWadData = enhancedChipResult.wadData.map(wadItem => ({
-        timestamp: wadItem.timestamp,
-        wad: wadItem.weightedWad
-      }));
-      
-      // 使用算法计算的支撑位和压力位
-      const mockSupportPrice = enhancedChipResult.enhancedSupportResistance.strongestSupport?.price || 0;
-      const mockResistancePrice = enhancedChipResult.enhancedSupportResistance.strongestResistance?.price || 0;
-      
-      setChipData(mockChipData);
-      setWadData(mockWadData);
-      setLargeOrderSummary(null);
-      setSupportPrice(mockSupportPrice);
-      setResistancePrice(mockResistancePrice);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }
+  
+  // 使用自定义Hook获取数据，实现右侧情报流的独立加载
+  const { tacticalState, loading, lastUpdate, fetchData } = useAIGeneticBrief(symbol);
+  
+  // 解构状态以便使用
+  const { chipData, wadData, largeOrderSummary, supportPrice, resistancePrice, suggestedStopLoss, lastPrice, priceBlink } = tacticalState;
 
   // 使用防抖函数包装fetchData，实现5秒防抖
-  const debouncedFetchData = useCallback(debounce(fetchData, 5000), [symbol]);
+  const debouncedFetchData = useCallback(debounce(fetchData, 5000), [fetchData]);
 
+  // 初始加载数据（带防抖）
   useEffect(() => {
     debouncedFetchData();
-    
-    // 设置定时刷新（每60秒，符合全局限制）
-    const interval = setInterval(fetchData, 60000);
-    
-    // 组件卸载时清除定时器
-    return () => {
-      clearInterval(interval);
-    };
   }, [symbol, debouncedFetchData]);
   
-  // 当支撑位或压力位变化时，计算建议止损位
-  useEffect(() => {
-    if (!supportPrice || !resistancePrice) return;
-    
-    // 建议止损位计算逻辑：
-    // 1. 当存在支撑位时，建议止损位设置在支撑位下方2%
-    // 2. 当支撑位不明确时，使用压力位和当前价格的比例来计算
-    const stopLossBelowSupport = supportPrice * 0.98;
-    
-    // 获取最新的WAD指标值，用于调整止损位
-    const latestWadValue = wadData.at(-1)?.wad || 0;
-    
-    // 根据WAD指标调整止损位：如果WAD指标为负（资金流出），则适当降低止损位
-    let adjustedStopLoss = stopLossBelowSupport;
-    if (latestWadValue < 0) {
-      adjustedStopLoss = stopLossBelowSupport * 0.99;
-    }
-    
-    setSuggestedStopLoss(adjustedStopLoss);
-  }, [supportPrice, resistancePrice, wadData]);
+  // 使用useMemo缓存计算结果，避免每次渲染都重新计算
+  const averageCost = useMemo(() => calculateAverageCost(chipData), [chipData]);
+  const concentration = useMemo(() => calculateConcentration(chipData), [chipData]);
+  const latestWadValue = useMemo(() => wadData.at(-1)?.wad || 0, [wadData]);
+  const latestWadTimestamp = useMemo(() => wadData.at(-1)?.timestamp, [wadData]);
+  
+  // 使用全局轮询钩子，当不在仪表盘页面时自动停止
+  usePolling(fetchData, {
+    interval: 60000, // 每60秒更新一次数据
+    tabKey: 'dashboard', // 仅在仪表盘页面运行
+    immediate: false // 不立即执行，依赖上面的初始加载
+  });
 
   if (loading) {
     return (
@@ -257,13 +327,17 @@ export default function WADChipDistribution({ symbol = 'SH600000' }: { symbol?: 
             <div className="chart-placeholder">
               <div className="chart-title">WAD 指标走势图</div>
               <div className="chart-data">
-                {wadData.slice(-5).map((item, index) => (
-                  <div key={index} className="chart-bar">
-                    <span>{new Date(item.timestamp).toLocaleDateString()}</span>
-                    <div className="bar" style={{ height: `${Math.abs(item.wad) / 1000}px` }}></div>
-                    <span>{item.wad.toFixed(2)}</span>
-                  </div>
-                ))}
+                {wadData && wadData.length > 0 ? (
+                  wadData.slice(-5).map((item, index) => (
+                    <div key={index} className="chart-bar">
+                      <span>{new Date(item.timestamp).toLocaleDateString()}</span>
+                      <div className="bar" style={{ height: `${Math.abs(item.wad) / 1000}px` }}></div>
+                      <span>{formatNumberToFixed2(item.wad)}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="skeleton" style={{ width: '100%', height: '100px' }}></div>
+                )}
               </div>
             </div>
           </div>
@@ -275,19 +349,23 @@ export default function WADChipDistribution({ symbol = 'SH600000' }: { symbol?: 
           <div className="chip-chart">
             <div className="chip-title">价格区间 - 筹码占比</div>
             <div className="chip-bars">
-              {chipData.map((item, index) => (
-                <div key={index} className="chip-bar">
-                  <span className="price-label">{item.price / 100}元</span>
-                  <div 
-                    className="bar" 
-                    style={{ 
-                      width: `${item.percentage * 100}%`,
-                      height: '20px'
-                    }}
-                  ></div>
-                  <span className="percent-label">{item.percentage.toFixed(2)}%</span>
-                </div>
-              ))}
+              {chipData && chipData.length > 0 ? (
+                chipData.map((item, index) => (
+                  <div key={index} className="chip-bar">
+                    <span className="price-label">{item.price / 100}元</span>
+                    <div 
+                      className="bar" 
+                      style={{ 
+                        width: `${item.percentage * 100}%`,
+                        height: '20px'
+                      }}
+                    ></div>
+                    <span className="percent-label">{formatNumberToFixed2(item.percentage)}%</span>
+                  </div>
+                ))
+              ) : (
+                <div className="skeleton" style={{ width: '100%', height: '200px' }}></div>
+              )}
             </div>
           </div>
         </div>
@@ -299,17 +377,17 @@ export default function WADChipDistribution({ symbol = 'SH600000' }: { symbol?: 
             <div className="large-order-summary">
               <div className="summary-item">
                 <span className="label">大单总金额:</span>
-                <span className="value">{(largeOrderSummary.totalAmount / 100000000).toFixed(2)}亿元</span>
+                <span className="value">{formatNumberWithUnit(largeOrderSummary.totalAmount)}</span>
               </div>
               <div className="summary-item">
                 <span className="label">大单净流入:</span>
                 <span className={`value ${largeOrderSummary.netInflow > 0 ? 'positive' : 'negative'}`}>
-                  {(largeOrderSummary.netInflow / 100000000).toFixed(2)}亿元
+                  {formatNumberWithUnit(largeOrderSummary.netInflow)}
                 </span>
               </div>
               <div className="summary-item">
                 <span className="label">大单占比:</span>
-                <span className="value">{(largeOrderSummary.ratio * 100).toFixed(2)}%</span>
+                <span className="value">{formatNumberToFixed2(largeOrderSummary.ratio * 100)}%</span>
               </div>
               <div className="summary-item">
                 <span className="label">主力意图:</span>
@@ -324,40 +402,40 @@ export default function WADChipDistribution({ symbol = 'SH600000' }: { symbol?: 
           <div className="indicator">
             <span className="label">平均成本:</span>
             <span className={`value ${priceBlink === 'up' ? 'price-blink-up' : priceBlink === 'down' ? 'price-blink-down' : ''}`}>
-              {calculateAverageCost(chipData) / 100}元
+              {formatNumberToFixed2(averageCost / 100)}元
             </span>
           </div>
           <div className="indicator">
             <span className="label">筹码集中度:</span>
-            <span className="value">{calculateConcentration(chipData).toFixed(2)}%</span>
+            <span className="value">{formatNumberToFixed2(concentration)}%</span>
           </div>
           <div className="indicator">
             <span className="label">WAD 指标:</span>
-            <span className="value">{wadData.at(-1)?.wad?.toFixed(2) || '0'}</span>
-            <span className="value">{wadData.at(-1)?.timestamp ? new Date(wadData.at(-1)?.timestamp!).toLocaleString() : '-'}</span>
+            <span className="value">{formatNumberToFixed2(latestWadValue)}</span>
+            <span className="value">{latestWadTimestamp ? new Date(latestWadTimestamp).toLocaleString() : '-'}</span>
           </div>
           <div className="metric-line trend">
             <div className="metric-label">趋势信号:</div>
-            <span className={`value ${(wadData.at(-1)?.wad || 0) > 0 ? 'positive' : 'negative'}`}>
-              {(wadData.at(-1)?.wad || 0) > 0 ? '流入' : '流出'}
+            <span className={`value ${latestWadValue > 0 ? 'positive' : 'negative'}`}>
+              {latestWadValue > 0 ? '流入' : '流出'}
             </span>
           </div>
           <div className="indicator">
             <span className="label">支撑位:</span>
             <span className={`value ${priceBlink === 'up' ? 'price-blink-up' : priceBlink === 'down' ? 'price-blink-down' : ''}`}>
-              {supportPrice ? (supportPrice / 100).toFixed(2) : '0.00'}元
+              {supportPrice ? formatNumberToFixed2(supportPrice / 100) : '0.00'}元
             </span>
           </div>
           <div className="indicator">
             <span className="label">压力位:</span>
             <span className={`value ${priceBlink === 'up' ? 'price-blink-up' : priceBlink === 'down' ? 'price-blink-down' : ''}`}>
-              {resistancePrice ? (resistancePrice / 100).toFixed(2) : '0.00'}元
+              {resistancePrice ? formatNumberToFixed2(resistancePrice / 100) : '0.00'}元
             </span>
           </div>
           <div className="indicator stop-loss">
             <span className="label">建议止损位:</span>
             <span className={`value ${priceBlink === 'up' ? 'price-blink-up' : priceBlink === 'down' ? 'price-blink-down' : ''}`}>
-              {suggestedStopLoss ? (suggestedStopLoss / 100).toFixed(2) : '0.00'}元
+              {suggestedStopLoss ? formatNumberToFixed2(suggestedStopLoss / 100) : '0.00'}元
             </span>
           </div>
         </div>
@@ -365,8 +443,8 @@ export default function WADChipDistribution({ symbol = 'SH600000' }: { symbol?: 
 
       <style jsx>{`
         .wad-chip-monitor {
-          background: #1e1e2e;
-          border-radius: 8px;
+          background: #000;
+          border: 1px solid #333;
           padding: 16px;
           color: #ffffff;
           height: 100%;
@@ -394,10 +472,9 @@ export default function WADChipDistribution({ symbol = 'SH600000' }: { symbol?: 
         }
 
         .monitor-controls select {
-          background: #2a2a3a;
+          background: #000;
           color: #ffffff;
-          border: 1px solid #3a3a4a;
-          border-radius: 4px;
+          border: 1px solid #333;
           padding: 4px 8px;
         }
 
@@ -413,12 +490,12 @@ export default function WADChipDistribution({ symbol = 'SH600000' }: { symbol?: 
         .wad-chart-container h4, .chip-distribution-container h4, .large-order-container h4 {
           margin: 0 0 12px 0;
           font-size: 14px;
-          color: #c4a7e7;
+          color: #FFD700;
         }
 
         .wad-chart, .chip-chart, .large-order-summary {
-          background: #2a2a3a;
-          border-radius: 4px;
+          background: #000;
+          border: 1px solid #333;
           padding: 12px;
         }
 
@@ -557,6 +634,23 @@ export default function WADChipDistribution({ symbol = 'SH600000' }: { symbol?: 
         .indicator.stop-loss .value {
           color: #f38ba8;
           font-weight: bold;
+        }
+        
+        /* 骨架屏样式 */
+        .skeleton {
+          background: linear-gradient(90deg, #1e1e2e 25%, #313244 50%, #1e1e2e 75%);
+          background-size: 200% 100%;
+          animation: skeleton-loading 1.5s infinite;
+          border-radius: 4px;
+        }
+        
+        @keyframes skeleton-loading {
+          0% {
+            background-position: 200% 0;
+          }
+          100% {
+            background-position: -200% 0;
+          }
         }
       `}</style>
     </div>

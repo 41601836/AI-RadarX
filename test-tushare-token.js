@@ -2,7 +2,7 @@
 const fetch = require('node-fetch');
 
 // 配置
-const TUSHARE_BASE_URL = 'http://api.tushare.pro';
+const TUSHARE_BASE_URL = 'https://api.tushare.pro';
 const TUSHARE_TOKEN = 'f9b8c49d3923d62bb18f643e99711a98a938e7216962b8c58be2039f';
 
 // 测试函数

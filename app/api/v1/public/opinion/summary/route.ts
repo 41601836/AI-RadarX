@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { apiHandler } from '../../../../../lib/api/common/handler';
-import { errorResponse, badRequestError, stockCodeFormatError } from '../../../../../lib/api/common/errors';
-import { fetchPublicOpinionSummary } from '../../../../../lib/api/publicOpinion/summary';
+import { apiHandler } from '@/lib/api/common/handler';
+import { errorResponse, badRequestError, stockCodeFormatError } from '@/lib/api/common/errors';
+import { fetchOpinionSummary } from '@/lib/api/publicOpinion/summary';
 
 /**
  * 获取单只股票舆情汇总
@@ -11,37 +11,28 @@ import { fetchPublicOpinionSummary } from '../../../../../lib/api/publicOpinion/
 async function handlePublicOpinionSummaryRequest(request: NextRequest) {
   // 解析请求参数
   const { searchParams } = new URL(request.url);
-  const stockCode = searchParams.get('stockCode');
-  const timeRange = searchParams.get('timeRange');
+  const stockCode = searchParams.get('stockCode') || '';
+  const timeRange = searchParams.get('timeRange') || undefined;
   
   // 验证必要参数
   if (!stockCode) {
-    return NextResponse.json(
-      errorResponse(badRequestError('stockCode is required')),
-      { status: 400 }
-    );
+    throw badRequestError('stockCode is required');
   }
   
   // 验证股票代码格式
   const stockCodeRegex = /^(SH|SZ)\d{6}$/;
   if (!stockCodeRegex.test(stockCode)) {
-    return NextResponse.json(
-      errorResponse(stockCodeFormatError('股票代码格式错误，应为SH/SZ开头的6位数字')),
-      { status: 400 }
-    );
+    throw stockCodeFormatError('股票代码格式错误，应为SH/SZ开头的6位数字');
   }
   
   // 验证timeRange参数（如果提供）
   const validTimeRanges = ['1d', '3d', '7d', '30d'];
   if (timeRange && !validTimeRanges.includes(timeRange)) {
-    return NextResponse.json(
-      errorResponse(badRequestError('timeRange参数必须是1d/3d/7d/30d之一')),
-      { status: 400 }
-    );
+    throw badRequestError('timeRange参数必须是1d/3d/7d/30d之一');
   }
   
   // 调用业务逻辑获取舆情汇总数据
-  const publicOpinionSummaryData = await fetchPublicOpinionSummary({ stockCode, timeRange });
+  const publicOpinionSummaryData = await fetchOpinionSummary({ stockCode, timeRange });
   
   return publicOpinionSummaryData;
 }

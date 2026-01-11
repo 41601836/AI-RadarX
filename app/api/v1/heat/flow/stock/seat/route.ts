@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { apiHandler } from '../../../../../lib/api/common/handler';
-import { errorResponse, badRequestError, stockCodeFormatError } from '../../../../../lib/api/common/errors';
-import { fetchHeatFlowStockSeat } from '../../../../../lib/api/heatFlow/stockSeat';
+import { apiHandler } from '@/lib/api/common/handler';
+import { errorResponse, badRequestError, stockCodeFormatError } from '@/lib/api/common/errors';
+import { fetchHeatFlowStockSeat } from '@/lib/api/heatFlow/stockSeat';
 
 
 /**
@@ -12,25 +12,19 @@ import { fetchHeatFlowStockSeat } from '../../../../../lib/api/heatFlow/stockSea
 async function handleHeatFlowStockSeatRequest(request: NextRequest) {
   // 解析请求参数
   const { searchParams } = new URL(request.url);
-    const stockCode = searchParams.get('stockCode');
+    const stockCode = searchParams.get('stockCode') || '';
 
-  const startDate = searchParams.get('startDate');
-  const endDate = searchParams.get('endDate');
+  const startDate = searchParams.get('startDate') || undefined;
+  const endDate = searchParams.get('endDate') || undefined;
   // 验证必要参数
   if (!stockCode) {
-    return NextResponse.json(
-      errorResponse(badRequestError('stockCode is required')),
-      { status: 400 }
-    );
+    throw badRequestError('stockCode is required');
   }
   
   // 验证股票代码格式
   const stockCodeRegex = /^(SH|SZ)\d{6}$/;
   if (!stockCodeRegex.test(stockCode)) {
-    return NextResponse.json(
-      errorResponse(stockCodeFormatError('股票代码格式错误，应为SH/SZ开头的6位数字')),
-      { status: 400 }
-    );
+    throw stockCodeFormatError('股票代码格式错误，应为SH/SZ开头的6位数字');
   }
 
   // 调用业务逻辑

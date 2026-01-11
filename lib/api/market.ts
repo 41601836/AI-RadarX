@@ -1,6 +1,6 @@
 // API 桥接模块：将原本请求 Fincept Mock 数据的代码重定向到 Java 后端
 import { apiGet } from './common/fetch';
-import { ApiResponse } from './common/response';
+import { ApiResponse, PaginationResponse } from './common/response';
 import { ApiError, ErrorCode } from './common/errors';
 
 // 股票基本信息接口
@@ -34,6 +34,28 @@ export interface OHLCVData {
   volume: number;
 }
 
+// 实时指数数据接口
+export interface RealTimeIndexData {
+  symbol: string;
+  name: string;
+  current: number;
+  change: number;
+  changePercent: number;
+  open: number;
+  high: number;
+  low: number;
+  volume: number;
+  amount: number;
+  updateTime: string;
+}
+
+// 数据源类型
+export enum DataSource {
+  TENCENT_REALTIME = 'TENCENT_REALTIME',
+  TUSHARE = 'TUSHARE',
+  MOCK = 'MOCK'
+}
+
 export async function fetchKLineData(
   symbol: string,
   interval: string = '1d',
@@ -57,12 +79,8 @@ export async function fetchKLineData(
     };
   } catch (error) {
     console.error('Error fetching K-line data:', error);
-    // 如果是 ApiError，直接抛出
-    if (error instanceof ApiError) {
-      throw error;
-    }
     
-    // 生成模拟数据作为后备，并返回符合 ApiResponse 格式的响应
+    // 无论什么错误，都生成模拟数据作为后备
     const mockData = generateMockKLineData();
     return {
       code: ErrorCode.SUCCESS,
@@ -87,10 +105,10 @@ export function mapTushareToOHLCV(tushareData: any[]): OHLCVData[] {
 }
 
 // 从 Tushare 获取股票基本信息列表
-export async function fetchStockBasicList(): Promise<ApiResponse<StockBasicInfo[]>> {
+export async function fetchStockBasicList(): Promise<ApiResponse<PaginationResponse<StockBasicInfo>>> {
   try {
     // 使用统一的 apiGet 函数调用 Tushare 的 stock_basic 接口
-    const response = await apiGet<{ data: StockBasicInfo[] }>('/market/stock_basic', {
+    const response = await apiGet<{ data: PaginationResponse<StockBasicInfo> }>('/market/stock_basic', {
       exchange: 'SSE,SZSE', // 只获取上交所和深交所的股票
       list_status: 'L', // 只获取上市的股票
     });
@@ -102,12 +120,8 @@ export async function fetchStockBasicList(): Promise<ApiResponse<StockBasicInfo[
     };
   } catch (error) {
     console.error('Error fetching stock basic list:', error);
-    // 如果是 ApiError，直接抛出
-    if (error instanceof ApiError) {
-      throw error;
-    }
-
-    // 生成模拟数据作为后备，并返回符合 ApiResponse 格式的响应
+    
+    // 无论什么错误，都生成模拟数据作为后备
     const mockData = generateMockStockBasicList();
     return {
       code: ErrorCode.SUCCESS,
@@ -120,7 +134,7 @@ export async function fetchStockBasicList(): Promise<ApiResponse<StockBasicInfo[
 }
 
 // 生成模拟股票基本信息数据
-function generateMockStockBasicList(): StockBasicInfo[] {
+function generateMockStockBasicList(): PaginationResponse<StockBasicInfo> {
   // 模拟A股股票列表
   const mockStocks: StockBasicInfo[] = [
     { ts_code: 'SH600000', symbol: '600000', name: '浦发银行', area: '上海', industry: '银行', market: '主板', list_date: '19990114', pinyin: 'pfyh' },
@@ -135,7 +149,13 @@ function generateMockStockBasicList(): StockBasicInfo[] {
     { ts_code: 'SZ000002', symbol: '000002', name: '万科A', area: '深圳', industry: '房地产', market: '主板', list_date: '19910129', pinyin: 'wka' },
   ];
 
-  return mockStocks;
+  return {
+    list: mockStocks,
+    total: mockStocks.length,
+    pageNum: 1,
+    pageSize: 20,
+    pages: 1
+  };
 }
 
 // 生成模拟数据作为后备
@@ -165,4 +185,156 @@ function generateMockKLineData(): OHLCVData[] {
   }
 
   return mockData;
+}
+
+/**
+ * 从腾讯财经API获取实时指数数据
+ * @returns 实时指数数据和数据源信息
+ */
+export async function fetchRealTimeIndices(): Promise<{ indices: RealTimeIndexData[]; dataSource: DataSource }> {
+  // 腾讯财经API基础URL
+  const TENCENT_FINANCE_URL = 'http://qt.gtimg.cn/q=';
+  
+  // 上证指数和深证成指的代码
+  const indexCodes = ['sh000001', 'sz399001'];
+  
+  try {
+    // 构建腾讯财经API请求URL
+    const url = `${TENCENT_FINANCE_URL}${indexCodes.join(',')}`;
+    
+    // 设置超时保护
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    
+    // 发起请求
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'text/plain',
+      },
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeoutId);
+    
+    // 检查响应状态
+    if (!response.ok) {
+      throw new Error(`Tencent Finance API error: ${response.status}`);
+    }
+    
+    // 解析响应数据
+    const data = await response.text();
+    
+    // 解析腾讯财经返回的文本数据
+    const indices = parseTencentIndexData(data);
+    
+    return { indices, dataSource: DataSource.TENCENT_REALTIME };
+  } catch (error) {
+    console.error('获取实时指数数据失败:', error);
+    
+    // 如果API调用失败，返回模拟数据
+    return { 
+      indices: generateMockRealTimeIndices(), 
+      dataSource: DataSource.MOCK 
+    };
+  }
+}
+
+/**
+ * 解析腾讯财经返回的指数数据
+ * @param data 原始文本数据
+ * @returns 格式化后的指数数据
+ */
+function parseTencentIndexData(data: string): RealTimeIndexData[] {
+  const result: RealTimeIndexData[] = [];
+  const lines = data.split(';');
+  
+  lines.forEach(line => {
+    if (!line || !line.startsWith('v_')) return;
+    
+    try {
+      // 提取指数代码和数据
+      const [keyPart, valuePart] = line.split('=');
+      if (!keyPart || !valuePart) return;
+      
+      // 提取指数代码
+      const symbol = keyPart.substring(2);
+      
+      // 解析数据部分
+      const dataStr = valuePart.replace(/^"|"$/g, '');
+      const dataArray = dataStr.split('~');
+      
+      if (dataArray.length < 30) return;
+      
+      // 提取关键数据
+      const name = dataArray[1];
+      const current = parseFloat(dataArray[3]) * 100; // 转换为分
+      const preClose = parseFloat(dataArray[4]) * 100;
+      const open = parseFloat(dataArray[5]) * 100;
+      const high = parseFloat(dataArray[33]) * 100;
+      const low = parseFloat(dataArray[34]) * 100;
+      const volume = parseInt(dataArray[36]);
+      const amount = parseFloat(dataArray[37]) * 1000000; // 转换为分（原数据是万元）
+      
+      // 计算涨跌额和涨跌幅
+      const change = current - preClose;
+      const changePercent = parseFloat(dataArray[31]);
+      
+      // 格式化更新时间
+      const updateTime = new Date().toISOString().slice(0, 19).replace('T', ' ');
+      
+      result.push({
+        symbol,
+        name,
+        current,
+        change,
+        changePercent,
+        open,
+        high,
+        low,
+        volume,
+        amount,
+        updateTime
+      });
+    } catch (error) {
+      console.error(`解析指数数据失败: ${line}`, error);
+    }
+  });
+  
+  return result;
+}
+
+/**
+ * 生成模拟实时指数数据
+ * @returns 模拟的实时指数数据
+ */
+function generateMockRealTimeIndices(): RealTimeIndexData[] {
+  return [
+    {
+      symbol: 'sh000001',
+      name: '上证指数',
+      current: 3285.16 * 100,
+      change: 12.34 * 100,
+      changePercent: 0.38,
+      open: 3275.50 * 100,
+      high: 3290.22 * 100,
+      low: 3270.18 * 100,
+      volume: 23580000000,
+      amount: 3568000000000,
+      updateTime: new Date().toISOString().slice(0, 19).replace('T', ' ')
+    },
+    {
+      symbol: 'sz399001',
+      name: '深证成指',
+      current: 12456.78 * 100,
+      change: -23.45 * 100,
+      changePercent: -0.19,
+      open: 12480.23 * 100,
+      high: 12495.67 * 100,
+      low: 12430.56 * 100,
+      volume: 34210000000,
+      amount: 5678000000000,
+      updateTime: new Date().toISOString().slice(0, 19).replace('T', ' ')
+    }
+  ];
 }

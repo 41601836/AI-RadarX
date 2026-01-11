@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* 全局样式重置 - 1985年未来科技风格 */
 
 /* 基础重置 */
@@ -6,7 +10,9 @@
   padding: 0;
   box-sizing: border-box;
   border-radius: 0 !important;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 13px !important;
+  color: #FFFFFF !important;
 }
 
 /* 页面背景和基础颜色 */
@@ -15,6 +21,8 @@ html, body {
   color: #FFFFFF !important;
   font-size: 14px !important;
   overflow: hidden;
+  height: 100vh !important;
+  width: 100vw !important;
 }
 
 /* 所有容器边框 */
@@ -31,52 +39,52 @@ article, aside, canvas, details, embed,
 figure, figcaption, footer, header, hgroup,
 menu, nav, output, ruby, section, summary,
 time, mark, audio, video {
-  border: 1px solid #3f3f46 !important; /* border-zinc-700 */
+  border: 1px solid #333 !important;
 }
 
 /* 链接样式 */
 a {
-  color: #FF9900 !important;
+  color: #00FF00 !important;
   text-decoration: none !important;
 }
 
 a:hover {
-  color: #CCCCCC !important;
-  background-color: #FF9900 !important;
+  color: #FFFFFF !important;
+  background-color: #00FF00 !important;
 }
 
 /* 按钮样式 */
 button {
   background-color: #000000 !important;
-  color: #FF9900 !important;
-  border: 1px solid #FF9900 !important;
+  color: #00FF00 !important;
+  border: 1px solid #00FF00 !important;
   padding: 4px 8px !important;
   cursor: pointer !important;
-  font-size: 14px !important;
+  font-size: 13px !important;
 }
 
 button:hover {
-  background-color: #FF9900 !important;
+  background-color: #00FF00 !important;
   color: #000000 !important;
 }
 
 button.active {
-  box-shadow: 0 0 5px rgba(255, 153, 0, 0.5) !important;
+  box-shadow: 0 0 5px rgba(0, 255, 0, 0.5) !important;
 }
 
 /* 输入框样式 */
 input, textarea, select {
   background-color: #000000 !important;
-  color: #CCCCCC !important;
-  border: 1px solid #333333 !important;
+  color: #FFFFFF !important;
+  border: 1px solid #00FF00 !important;
   padding: 4px 8px !important;
-  font-size: 12px !important;
+  font-size: 13px !important;
 }
 
 input:focus, textarea:focus, select:focus {
   outline: none !important;
-  border-color: #FF9900 !important;
-  box-shadow: 0 0 0 1px #FF9900 !important;
+  border-color: #00FF00 !important;
+  box-shadow: 0 0 0 1px #00FF00 !important;
 }
 
 /* 表格样式 */
@@ -86,14 +94,15 @@ table {
 }
 
 th, td {
-  border: 1px solid #333333 !important;
+  border: 1px solid #00FF00 !important;
   padding: 4px 8px !important;
   text-align: left !important;
 }
 
 th {
-  background-color: #333333 !important;
-  color: #FF9900 !important;
+  background-color: #000000 !important;
+  color: #00FF00 !important;
+  font-weight: bold !important;
 }
 
 /* 滚动条隐藏 */
@@ -331,6 +340,14 @@ h1, h2, h3, h4, h5, h6 {
   font-size: 14px !important;
 }
 
+/* 快捷键样式 */
+.shortcut {
+  font-size: 10px !important;
+  color: #6b7280 !important;
+  margin-left: 4px !important;
+  opacity: 0.7 !important;
+}
+
 
 
 /* 1985年科技风格的扫描线效果 */
@@ -368,4 +385,104 @@ h1, h2, h3, h4, h5, h6 {
 .status-light.warning {
   background-color: #FF9900 !important;
   box-shadow: 0 0 4px #FF9900 !important;
+}
+
+/* 对比槽位样式 */
+.comparison-slots {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 8px !important;
+  grid-column: 1 / -1 !important;
+}
+
+.panel.comparison-slot {
+  height: 200px !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.comparison-content {
+  flex: 1 !important;
+  display: flex !important;
+  justify-content: space-around !important;
+  align-items: center !important;
+  padding: 8px !important;
+}
+
+.comparison-item {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 4px !important;
+  width: 40% !important;
+}
+
+.item-header {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 2px !important;
+}
+
+.item-name {
+  font-weight: bold !important;
+  font-size: 14px !important;
+}
+
+.item-code {
+  font-size: 12px !important;
+  color: #888 !important;
+}
+
+.item-value {
+  font-size: 24px !important;
+  font-weight: bold !important;
+  color: #FFFFFF !important;
+}
+
+.item-change, .item-percent {
+  font-size: 14px !important;
+  font-weight: bold !important;
+}
+
+.item-change.positive, .item-percent.positive {
+  color: #00FF00 !important;
+}
+
+.item-change.negative, .item-percent.negative {
+  color: #FF0000 !important;
+}
+
+/* 对冲分析样式 */
+.hedge-analysis {
+  flex: 1 !important;
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 12px !important;
+  padding: 8px !important;
+}
+
+.analysis-item {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+}
+
+.analysis-label {
+  font-size: 12px !important;
+  color: #888 !important;
+}
+
+.analysis-value {
+  font-size: 16px !important;
+  font-weight: bold !important;
+  color: #FFFFFF !important;
+}
+
+.analysis-value.positive {
+  color: #00FF00 !important;
+}
+
+.analysis-value.negative {
+  color: #FF0000 !important;
 }

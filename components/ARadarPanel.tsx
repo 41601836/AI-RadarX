@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
+import { calculateRadarDimensions } from '../lib/algorithms/radarCalculations';
+import { usePolling } from '../lib/hooks/usePolling';
 
 // 动态导入雷达图组件
 const SmartThresholdRadar = dynamic(() => import('./SmartThresholdRadar'), { ssr: false });
@@ -74,59 +76,118 @@ const ARadarPanel: React.FC = () => {
     return newData;
   };
 
-  // 定期更新雷达图数据，实现平滑过渡
-  useEffect(() => {
-    const emotionBase = {
-      liquidity: 75,
-      sellingPressure: 50,
-      sentiment: 65,
-      volumePower: 80,
-      trendStrength: 70,
-      chipConcentration: 60
+  // 使用全局轮询钩子，当不在仪表盘页面时自动停止
+  usePolling(() => {
+    // 数据变化阈值，只有超过这个值才更新，避免微小变化导致的频繁更新
+    const DATA_CHANGE_THRESHOLD = 1.0;
+    // 生成随机参数用于计算（实际应用中应从API获取真实数据）
+    const radarParams = {
+      // 基础参数
+      currentTurnover: Math.random() * 100 + 10,
+      fiveDayAvgTurnover: Math.random() * 80 + 10,
+      volumeRatio: Math.random() * 3 + 0.5,
+      sellOrderDepth: Math.random() * 1.5,
+      profitTakingPercentage: Math.random() * 100,
+      recentVolumeTrend: Math.random() * 2 - 1,
+      explosionRate: Math.random() * 50,
+      maxContinuationHeight: Math.random() * 10,
+      marketIndexChange: Math.random() * 10 - 5,
+      currentVolume: Math.random() * 10000000 + 1000000,
+      avgVolume: Math.random() * 8000000 + 1000000,
+      volumeAccumulation: Math.random() * 2 - 1,
+      shortTermTrend: Math.random() * 2 - 1,
+      mediumTermTrend: Math.random() * 2 - 1,
+      longTermTrend: Math.random() * 2 - 1,
+      volatility: Math.random(),
+      
+      // 分时强度参数
+      intradayStrengthParams: {
+        priceData: Array.from({ length: 10 }, (_, i) => ({
+          timestamp: Date.now() - (10 - i) * 60000,
+          high: Math.random() * 10 + 3000,
+          low: Math.random() * 10 + 3000,
+          close: Math.random() * 10 + 3000,
+          volume: Math.random() * 10000000 + 1000000
+        }))
+      },
+      
+      // 筹码分布参数
+      chipDistributionParams: {
+        chipData: Array.from({ length: 10 }, (_, i) => ({
+          price: 3000 + i * 10,
+          percentage: Math.random() * 0.2,
+          volume: Math.random() * 10000000
+        })),
+        currentPrice: 3050
+      },
+      
+      // 偏离度参数
+      deviationParams: {
+        currentPrice: 3050,
+        deviationDuration: Math.random() * 120,
+        volatility: Math.random()
+      }
     };
 
-    const stockBase = {
-      priceStrength: 75,
-      volumeStrength: 82,
-      trendStrength: 68,
-      chipStrength: 90,
-      fundStrength: 78,
-      newsStrength: 65
+    // 使用真实算法计算情绪雷达数据
+    const calculatedEmotionData = calculateRadarDimensions(radarParams);
+    
+    // 计算新的情绪雷达数据
+    const newEmotionData = {
+      liquidity: calculatedEmotionData.liquidity,
+      sellingPressure: calculatedEmotionData.sellingPressure,
+      sentiment: calculatedEmotionData.sentiment,
+      volumePower: Math.random() * 100, // 模拟量能强度
+      trendStrength: calculatedEmotionData.trendStrength,
+      chipConcentration: Math.random() * 100 // 模拟筹码集中度
     };
-
-    let emotionTarget = generateTargetData(emotionBase);
-    let stockTarget = generateTargetData(stockBase);
-
-    const updateInterval = setInterval(() => {
-      // 更新情绪雷达数据
-      setCurrentEmotionData(prev => {
-        const newData = smoothTransition(emotionTarget, prev);
-        // 如果接近目标值，生成新的目标数据
-        const isClose = Object.keys(newData).every(key => {
-          return Math.abs(newData[key as keyof EmotionRadarData] - emotionTarget[key as keyof EmotionRadarData]) < 0.1;
-        });
-        if (isClose) {
-          emotionTarget = generateTargetData(emotionBase);
-        }
-        return newData;
+    
+    // 检查情绪雷达数据是否有显著变化
+    setCurrentEmotionData(prev => {
+      // 计算数据变化量
+      const changes = Object.keys(prev).some(key => {
+        const prevValue = prev[key as keyof EmotionRadarData];
+        const newValue = newEmotionData[key as keyof EmotionRadarData];
+        return Math.abs(newValue - prevValue) > DATA_CHANGE_THRESHOLD;
       });
+      
+      // 只有当数据变化超过阈值时才更新
+      if (changes) {
+        return smoothTransition(newEmotionData, prev);
+      }
+      return prev;
+    });
 
-      // 更新个股雷达数据
-      setCurrentStockData(prev => {
-        const newData = smoothTransition(stockTarget, prev);
-        // 如果接近目标值，生成新的目标数据
-        const isClose = Object.keys(newData).every(key => {
-          return Math.abs(newData[key as keyof StockRadarData] - stockTarget[key as keyof StockRadarData]) < 0.1;
-        });
-        if (isClose) {
-          stockTarget = generateTargetData(stockBase);
-        }
-        return newData;
+    // 计算新的个股雷达数据
+    const newStockData = {
+      priceStrength: calculatedEmotionData.trendStrength, // 价格强度映射到趋势强度
+      volumeStrength: Math.min(100, radarParams.volumeRatio * 100), // 量能强度映射到量比
+      trendStrength: calculatedEmotionData.trendStrength, // 趋势强度
+      chipStrength: Math.random() * 100, // 模拟筹码强度
+      fundStrength: Math.min(100, (1 - radarParams.sellOrderDepth) * 100), // 资金强度映射到卖压强度的反向
+      newsStrength: calculatedEmotionData.sentiment // 消息强度映射到情绪
+    };
+    
+    // 检查个股雷达数据是否有显著变化
+    setCurrentStockData(prev => {
+      // 计算数据变化量
+      const changes = Object.keys(prev).some(key => {
+        const prevValue = prev[key as keyof StockRadarData];
+        const newValue = newStockData[key as keyof StockRadarData];
+        return Math.abs(newValue - prevValue) > DATA_CHANGE_THRESHOLD;
       });
-    }, 500); // 每500毫秒更新一次，实现平滑过渡
-
-    return () => clearInterval(updateInterval);
-  }, []);
+      
+      // 只有当数据变化超过阈值时才更新
+      if (changes) {
+        return smoothTransition(newStockData, prev);
+      }
+      return prev;
+    });
+  }, {
+    interval: 2000, // 每2000毫秒更新一次，减少CPU占用
+    tabKey: 'dashboard', // 仅在仪表盘页面运行
+    immediate: true // 立即执行
+  });
 
   return (
     <div className="a-radar-panel panel">
@@ -151,9 +212,23 @@ const ARadarPanel: React.FC = () => {
         <h3>{radarType === 'emotion' ? '市场情绪雷达' : '个股表现雷达'}</h3>
         <div className="radar-chart-container">
           {radarType === 'emotion' ? (
-            <SmartThresholdRadar data={currentEmotionData as any} />
+            <SmartThresholdRadar data={{
+              '流动性': currentEmotionData.liquidity,
+              '抛压': currentEmotionData.sellingPressure,
+              '情绪': currentEmotionData.sentiment,
+              '量能': currentEmotionData.volumePower,
+              '分时强度': currentEmotionData.trendStrength,
+              '筹码集中': currentEmotionData.chipConcentration
+            }} />
           ) : (
-            <SmartThresholdRadar data={currentStockData as any} />
+            <SmartThresholdRadar data={{
+              '分时量比': currentStockData.volumeStrength,
+              '换手变动': currentEmotionData.liquidity,
+              '卖压强度': currentEmotionData.sellingPressure,
+              '趋势强度': currentStockData.trendStrength,
+              '资金强度': currentStockData.fundStrength,
+              '消息强度': currentStockData.newsStrength
+            }} />
           )}
         </div>
       </div>
@@ -172,10 +247,10 @@ const ARadarPanel: React.FC = () => {
           </ul>
         ) : (
           <ul className="data-description">
-            <li>价格强度: {currentStockData.priceStrength.toFixed(1)}%</li>
-            <li>量能强度: {currentStockData.volumeStrength.toFixed(1)}%</li>
+            <li>分时量比: {currentStockData.volumeStrength.toFixed(1)}%</li>
+            <li>换手变动: {currentEmotionData.liquidity.toFixed(1)}分</li>
+            <li>卖压强度: {currentEmotionData.sellingPressure.toFixed(1)}分</li>
             <li>趋势强度: {currentStockData.trendStrength.toFixed(1)}%</li>
-            <li>筹码强度: {currentStockData.chipStrength.toFixed(1)}%</li>
             <li>资金强度: {currentStockData.fundStrength.toFixed(1)}%</li>
             <li>消息强度: {currentStockData.newsStrength.toFixed(1)}%</li>
           </ul>

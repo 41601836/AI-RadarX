@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { apiHandler } from '../../../../../lib/api/common/handler';
-import { errorResponse, badRequestError } from '../../../../../lib/api/common/errors';
-import { fetchHeatFlowAlertList } from '../../../../../lib/api/heatFlow/alert';
+import { apiHandler } from '@/lib/api/common/handler';
+import { errorResponse, badRequestError } from '@/lib/api/common/errors';
+import { fetchHeatFlowAlertList } from '@/lib/api/heatFlow/alert';
 
 
 /**
@@ -13,7 +13,7 @@ async function handleHeatFlowAlertListRequest(request: NextRequest) {
   // 解析请求参数
   const { searchParams } = new URL(request.url);
   
-  const alertLevel = searchParams.get('alertLevel');
+  const alertLevel = searchParams.get('alertLevel') as "high" | "medium" | "low" | undefined;
   const pageNum = searchParams.get('pageNum');
   const pageSize = searchParams.get('pageSize');
 

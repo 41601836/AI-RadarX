@@ -78,7 +78,7 @@ export function calculateMode(numbers: number[]): number {
 // 计算动态阈值（增强版，包含鲁棒性指标）
 export function calculateEnhancedDynamicThreshold(orders: OrderItem[], n: number = 2): EnhancedDynamicThreshold {
   if (orders.length === 0) {
-    return { mean: 0, std: 0, threshold: 0, n, median: 0, mode: 0, q1: 0, q3: 0, iqr: 0, outlierCount: 0 };
+    return { mean: 0, std: 0, threshold: 0, n, median: 0, mode: 0, q1: 0, q3: 0, iqr: 0, outlierCount: 0, upperThreshold: 0, timeWindow: 0, orderCount: 0 };
   }
   
   // 提取所有订单金额
@@ -114,6 +114,9 @@ export function calculateEnhancedDynamicThreshold(orders: OrderItem[], n: number
   const outlierUpperBound = q3 + 1.5 * iqr;
   const outlierCount = amounts.filter(amount => amount < outlierLowerBound || amount > outlierUpperBound).length;
   
+  // 计算超大型订单阈值（3倍标准差）
+  const upperThreshold = mean + 3 * std;
+  
   return { 
     mean, 
     std, 
@@ -124,7 +127,10 @@ export function calculateEnhancedDynamicThreshold(orders: OrderItem[], n: number
     q1, 
     q3, 
     iqr, 
-    outlierCount 
+    outlierCount,
+    upperThreshold,
+    timeWindow: 60000, // 默认60秒时间窗口
+    orderCount: amounts.length
   };
 }
 
@@ -428,6 +434,106 @@ export interface EnhancedOrderStreamProcessor {
   reset(): void;
 }
 
+// EnhancedOrderStreamProcessor的具体实现（基于Flink流处理逻辑）
+export class FlinkStyleOrderStreamProcessor implements EnhancedOrderStreamProcessor {
+  private windowProcessors: Map<string, WindowProcessor<OrderItem>> = new Map();
+  private largeOrderResults: LargeOrderResult[] = [];
+  private currentThreshold: DynamicThreshold = { 
+    mean: 0, 
+    std: 0, 
+    threshold: 0, 
+    n: 2, 
+    upperThreshold: 0, 
+    timeWindow: 60000, 
+    orderCount: 0 
+  };
+  private maxHistorySize: number = 1000;
+  private n: number = 2;
+  
+  constructor(windowConfigs: WindowConfig[], n: number = 2) {
+    this.n = n;
+    // 创建不同类型的窗口处理器
+    windowConfigs.forEach((config, index) => {
+      this.windowProcessors.set(`window-${index}-${config.type}`, new WindowProcessor(config, n));
+    });
+  }
+  
+  processOrder(order: OrderItem): LargeOrderResult {
+    // 更新动态阈值
+    this.updateDynamicThreshold(order);
+    
+    // 识别单个特大单
+    const result = identifySingleLargeOrder(order, this.currentThreshold);
+    
+    // 将结果添加到历史记录
+    this.largeOrderResults.push(result);
+    if (this.largeOrderResults.length > this.maxHistorySize) {
+      this.largeOrderResults.shift();
+    }
+    
+    // 将订单分发到所有窗口处理器
+    for (const [windowId, processor] of this.windowProcessors.entries()) {
+      processor.processOrder(order);
+    }
+    
+    return result;
+  }
+  
+  private updateDynamicThreshold(order: OrderItem): void {
+    // 使用高效版动态阈值计算
+    const recentOrders = this.largeOrderResults.slice(-1000).map(result => result.order);
+    recentOrders.push(order);
+    
+    this.currentThreshold = calculateEfficientDynamicThreshold(recentOrders, this.n);
+  }
+  
+  getCurrentThreshold(): DynamicThreshold {
+    return this.currentThreshold;
+  }
+  
+  getStatistics(): LargeOrderStatistics {
+    return calculateLargeOrderStats(this.largeOrderResults);
+  }
+  
+  getWindowStatistics(windowId: string): LargeOrderStatistics {
+    // 这个方法需要更复杂的实现，需要访问窗口内部的元素
+    // 目前返回一个空的统计结果
+    return {
+      totalOrders: 0,
+      largeOrders: 0,
+      extraLargeOrders: 0,
+      totalAmount: 0,
+      largeOrderAmount: 0,
+      largeOrderRatio: 0,
+      netInflow: 0,
+      orderPower: {
+        buyAmount: 0,
+        sellAmount: 0,
+        buyRatio: 0,
+        sellRatio: 0
+      }
+    };
+  }
+  
+  getActiveWindows(): string[] {
+    return Array.from(this.windowProcessors.keys());
+  }
+  
+  reset(): void {
+    this.largeOrderResults = [];
+    this.windowProcessors.clear();
+    this.currentThreshold = { 
+      mean: 0, 
+      std: 0, 
+      threshold: 0, 
+      n: 2, 
+      upperThreshold: 0, 
+      timeWindow: 60000, 
+      orderCount: 0 
+    };
+  }
+}
+
 // 窗口处理器（增强版，支持Flink式的窗口管理）
 export class WindowProcessor<T extends { tradeTime: string }> {
   private windowConfig: WindowConfig;
@@ -553,7 +659,7 @@ export class WindowProcessor<T extends { tradeTime: string }> {
         
         // 查找是否有符合条件的会话窗口
         for (const [windowId, state] of this.windowStates.entries()) {
-          if (state.type === 'session' && !state.isClosed) {
+          if (windowId.startsWith('session-') && !state.isClosed) {
             if (eventTime - state.endTime <= gap) {
               sessionWindowId = windowId;
               break;
@@ -819,7 +925,10 @@ export class EnhancedRealTimeLargeOrderProcessor implements EnhancedOrderStreamP
     q1: 0,
     q3: 0,
     iqr: 0,
-    outlierCount: 0
+    outlierCount: 0,
+    upperThreshold: 0,
+    timeWindow: 0,
+    orderCount: 0
   };
   private lastProcessTime: number = Date.now();
   private stateBackend: StateBackend;
@@ -1064,7 +1173,10 @@ export class EnhancedRealTimeLargeOrderProcessor implements EnhancedOrderStreamP
       q1: 0,
       q3: 0,
       iqr: 0,
-      outlierCount: 0
+      outlierCount: 0,
+      upperThreshold: 0,
+      timeWindow: 0,
+      orderCount: 0
     };
     
     // 清空状态后端
@@ -1133,7 +1245,10 @@ export class EnhancedRealTimeLargeOrderProcessor implements EnhancedOrderStreamP
         q1: 0,
         q3: 0,
         iqr: 0,
-        outlierCount: 0
+        outlierCount: 0,
+        upperThreshold: 0,
+        timeWindow: 0,
+        orderCount: 0
       };
     }
     
@@ -1320,7 +1435,7 @@ export function batchProcessOrders(
   windowConfig: WindowConfig,
   n: number = 2
 ): Map<string, LargeOrderResult[]> {
-  const processor = new WindowProcessor(windowConfig, n);
+  const processor = new WindowProcessor<OrderItem>(windowConfig, n);
   const resultsMap = new Map<string, LargeOrderResult[]>();
   
   // 按时间排序订单
@@ -1335,8 +1450,9 @@ export function batchProcessOrders(
   
   // 计算每个窗口的结果
   for (const windowId of processor.getActiveWindows()) {
-    const windowOrders = processor.getWindowOrders(windowId);
-    const windowThreshold = calculateDynamicThreshold(windowOrders, n);
+    const windowState = processor.getWindowState(windowId);
+    const windowOrders = windowState ? windowState.elements : [];
+    const windowThreshold = calculateEnhancedDynamicThreshold(windowOrders, n);
     const windowResults = windowOrders.map(order => {
       const extraLargeThreshold = windowThreshold.threshold * 1.5;
       const hugeOrderThreshold = windowThreshold.threshold * 3.0;

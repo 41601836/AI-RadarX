@@ -72,24 +72,48 @@ export const generateMarketDataMock: MockDataGenerator<MarketData> = async (para
     'SZ000001': '平安银行',
     'SZ000858': '五粮液',
     'SZ002594': '比亚迪',
+    'SH000001': '上证指数',
+    'SZ399001': '深成指',
   };
   
   const stockName = stockNameMap[stockCode] || '未知股票';
   
   // 生成模拟的日线数据
   const mockDailyData = [];
-  const basePrice = 850;
+  // 设置指数基准值：上证指数 4085.50 / 深成指 10256
+  let basePrice = 850;
+  if (stockCode === 'SH000001') {
+    basePrice = 408550; // 上证指数 4085.50
+    // 打印系统日志
+    console.log('[System] UI Refined, Base Index: 4085.50');
+  } else if (stockCode === 'SZ399001') {
+    basePrice = 1025678; // 深成指 10256.78
+  }
   const now = Date.now();
   
   for (let i = 30; i >= 0; i--) {
     const change = (Math.random() - 0.5) * 20;
-    const price = Math.max(700, Math.min(1000, basePrice + change * i));
+    let price;
+    let highChange;
+    let lowChange;
+    
+    if (stockCode === 'SH000001' || stockCode === 'SZ399001') {
+      // 指数价格波动范围更大
+      price = basePrice + change * i * 10;
+      highChange = Math.random() * 500;
+      lowChange = Math.random() * 500;
+    } else {
+      // 普通股票价格限制在合理范围内
+      price = Math.max(700, Math.min(1000, basePrice + change * i));
+      highChange = Math.random() * 15;
+      lowChange = Math.random() * 15;
+    }
     
     mockDailyData.push({
       timestamp: now - (i * 24 * 60 * 60 * 1000),
       open: price,
-      high: price + Math.random() * 15,
-      low: price - Math.random() * 15,
+      high: price + highChange,
+      low: Math.max(price - lowChange, basePrice * 0.95), // 不低于基准价的95%
       close: price,
       volume: Math.random() * 10000000,
       amount: price * Math.random() * 10000000
@@ -141,11 +165,13 @@ export async function fetchMarketData(
       };
     }
   } catch (error) {
-    // 如果Tushare数据获取失败，记录错误并回退到模拟数据
-    console.error('Failed to fetch Tushare data for market data, falling back to mock:', error);
+    // 如果Tushare数据获取失败，直接抛出错误
+    console.error('Failed to fetch Tushare data for market data:', error);
+    throw new Error('Failed to fetch market data: ' + (error instanceof Error ? error.message : 'Unknown error'));
   }
   
-  // 静默回退到模拟数据
+  // 默认返回模拟数据
+  console.info('Falling back to mock data');
   return apiGet<MarketData>(
     '/market/data',
     params,

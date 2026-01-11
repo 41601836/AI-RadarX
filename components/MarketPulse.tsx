@@ -1,7 +1,9 @@
 'use client';
 
 // 全市场监控带组件
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { formatNumberToFixed2, formatPercentToFixed2 } from '@/lib/utils/numberFormatter';
+import { usePolling } from '../lib/hooks/usePolling';
 
 // 涨跌停数据类型
 interface ADData {
@@ -30,8 +32,25 @@ interface SectorHeatItem {
   fundFlow: number;        // 资金流向（亿）
 }
 
+// 板块联动关系数据类型
+interface SectorLinkage {
+  sourceSector: string;    // 源板块名称
+  targetSector: string;    // 目标板块名称
+  correlation: number;     // 联动强度（-100 到 100）
+  lagTime: number;         // 滞后时间（分钟）
+}
+
+// 板块联动矩阵数据类型
+interface SectorLinkageMatrix {
+  sectors: string[];       // 板块列表
+  linkageData: SectorLinkage[]; // 联动关系数据
+}
+
 const MarketPulse: React.FC = () => {
-  // 涨跌停比数据
+  // 解决水合冲突的挂载状态
+  const [isMounted, setIsMounted] = useState(false);
+  
+  // 涨跌停数据
   const [adData, setADData] = useState<ADData>({
     advanceCount: 2350,
     declineCount: 1580,
@@ -41,6 +60,11 @@ const MarketPulse: React.FC = () => {
     bombBoardCount: 30,
     bombBoardRate: 35.3 // 炸板率（%）
   });
+  
+  // 组件挂载时设置isMounted为true
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // 成交量预估数据
   const [volumeForecast, setVolumeForecast] = useState<VolumeForecast>({
@@ -48,6 +72,21 @@ const MarketPulse: React.FC = () => {
     yesterdayVolume: 7200,
     forecastVolume: 8900,
     growthRate: 23.6
+  });
+
+  // 板块联动矩阵数据
+  const [sectorLinkageMatrix, setSectorLinkageMatrix] = useState<SectorLinkageMatrix>({
+    sectors: ['人工智能', '新能源汽车', '半导体', '医药生物', '消费电子', '金融地产', '石油化工', '有色金属'],
+    linkageData: [
+      { sourceSector: '人工智能', targetSector: '半导体', correlation: 85, lagTime: 0 },
+      { sourceSector: '新能源汽车', targetSector: '有色金属', correlation: 78, lagTime: 1 },
+      { sourceSector: '半导体', targetSector: '人工智能', correlation: 82, lagTime: 0 },
+      { sourceSector: '医药生物', targetSector: '消费电子', correlation: -35, lagTime: 2 },
+      { sourceSector: '金融地产', targetSector: '石油化工', correlation: 45, lagTime: 1 },
+      { sourceSector: '消费电子', targetSector: '半导体', correlation: 68, lagTime: 0 },
+      { sourceSector: '石油化工', targetSector: '有色金属', correlation: 52, lagTime: 1 },
+      { sourceSector: '有色金属', targetSector: '新能源汽车', correlation: 75, lagTime: 0 },
+    ]
   });
 
   // 板块资金热力数据
@@ -62,53 +101,49 @@ const MarketPulse: React.FC = () => {
     { sectorName: '有色金属', heatValue: 42, change: -2.5, fundFlow: -41.8 }
   ]);
 
-  // 模拟数据更新
-  useEffect(() => {
-    const updateData = () => {
-      // 更新涨跌停比数据
-      setADData(prev => {
-        const limitUp = Math.floor(Math.random() * 50) + 60;
-        const limitDown = Math.floor(Math.random() * 20) + 10;
-        const bombBoard = Math.floor(Math.random() * 40) + 10; // 10-50家炸板
-        const bombBoardRate = parseFloat(((bombBoard / (limitUp || 1)) * 100).toFixed(1));
-        return {
-          ...prev,
-          limitUpCount: limitUp,
-          limitDownCount: limitDown,
-          adRatio: parseFloat((limitUp / (limitDown || 1)).toFixed(1)),
-          bombBoardCount: bombBoard,
-          bombBoardRate: bombBoardRate
-        };
-      });
+  // 使用全局轮询钩子，当不在仪表盘页面时自动停止
+  usePolling(() => {
+    // 更新涨跌停比数据
+    setADData(prev => {
+      const limitUp = Math.floor(Math.random() * 50) + 60;
+      const limitDown = Math.floor(Math.random() * 20) + 10;
+      const bombBoard = Math.floor(Math.random() * 40) + 10; // 10-50家炸板
+      const bombBoardRate = parseFloat(((bombBoard / (limitUp || 1)) * 100).toFixed(2));
+      return {
+        ...prev,
+        limitUpCount: limitUp,
+        limitDownCount: limitDown,
+        adRatio: parseFloat((limitUp / (limitDown || 1)).toFixed(2)),
+        bombBoardCount: bombBoard,
+        bombBoardRate: bombBoardRate
+      };
+    });
 
-      // 更新成交量预估数据
-      setVolumeForecast(prev => {
-        const growthRate = (Math.random() - 0.5) * 20;
-        const forecast = parseFloat((prev.yesterdayVolume * (1 + growthRate / 100)).toFixed(0));
-        return {
-          ...prev,
-          forecastVolume: forecast,
-          growthRate: parseFloat(growthRate.toFixed(1))
-        };
-      });
+    // 更新成交量预估数据
+    setVolumeForecast(prev => {
+      const growthRate = (Math.random() - 0.5) * 20;
+      const forecast = parseFloat((prev.yesterdayVolume * (1 + growthRate / 100)).toFixed(0));
+      return {
+        ...prev,
+        forecastVolume: forecast,
+        growthRate: parseFloat(growthRate.toFixed(2))
+      };
+    });
 
-      // 更新板块资金热力数据
-      setSectorHeatMatrix(prev => {
-        return prev.map(sector => ({
-          ...sector,
-          heatValue: Math.min(Math.max(sector.heatValue + (Math.random() - 0.5) * 10, 0), 100),
-          change: parseFloat((sector.change + (Math.random() - 0.5) * 1).toFixed(1)),
-          fundFlow: parseFloat((sector.fundFlow + (Math.random() - 0.5) * 10).toFixed(1))
-        }));
-      });
-    };
-
-    // 每30秒更新一次数据
-    const interval = setInterval(updateData, 30000);
-
-    // 组件卸载时清除定时器
-    return () => clearInterval(interval);
-  }, []);
+    // 更新板块资金热力数据
+    setSectorHeatMatrix(prev => {
+      return prev.map(sector => ({
+        ...sector,
+        heatValue: Math.min(Math.max(sector.heatValue + (Math.random() - 0.5) * 10, 0), 100),
+        change: parseFloat((sector.change + (Math.random() - 0.5) * 1).toFixed(2)),
+        fundFlow: parseFloat((sector.fundFlow + (Math.random() - 0.5) * 10).toFixed(2))
+      }));
+    });
+  }, {
+    interval: 30000, // 每30秒更新一次数据
+    tabKey: 'dashboard', // 仅在仪表盘页面运行
+    immediate: true // 立即执行
+  });
 
   // 获取热力颜色
   const getHeatColor = (value: number): string => {
@@ -123,6 +158,33 @@ const MarketPulse: React.FC = () => {
   const getFundFlowColor = (value: number): string => {
     return value >= 0 ? '#22c55e' : '#ef4444';
   };
+
+  // 获取板块联动颜色
+  const getLinkageColor = (correlation: number): string => {
+    if (correlation >= 70) return '#ef4444'; // 强正相关 - 红色
+    if (correlation >= 40) return '#f59e0b'; // 中度正相关 - 橙色
+    if (correlation >= 10) return '#eab308'; // 弱正相关 - 黄色
+    if (correlation >= -10) return '#6b7280'; // 弱相关 - 灰色
+    if (correlation >= -40) return '#60a5fa'; // 弱负相关 - 浅蓝色
+    if (correlation >= -70) return '#3b82f6'; // 中度负相关 - 蓝色
+    return '#1d4ed8'; // 强负相关 - 深蓝色
+  };
+
+  // 获取板块联动强度的背景透明度
+  const getLinkageOpacity = (correlation: number): number => {
+    return Math.min(Math.abs(correlation) / 100, 0.8);
+  };
+
+  // 解决水合冲突，在客户端挂载后才渲染内容
+  if (!isMounted) {
+    return <div className="market-pulse-panel-placeholder" style={{ 
+      backgroundColor: '#1e1e2e', 
+      borderRadius: '12px', 
+      padding: '20px', 
+      color: '#fff', 
+      height: '100%' 
+    }} />;
+  }
 
   return (
     <div className="market-pulse-panel" style={{
@@ -189,7 +251,7 @@ const MarketPulse: React.FC = () => {
               fontSize: '28px',
               fontWeight: '700',
               color: '#a6e3a1'
-            }}>{adData.adRatio}</div>
+            }}>{formatNumberToFixed2(adData.adRatio)}</div>
             <div className="stat-label" style={{
               fontSize: '12px',
               color: '#888',
@@ -213,7 +275,7 @@ const MarketPulse: React.FC = () => {
                 color: '#a6e3a1'
               }}>{adData.limitUpCount}</div>
               <div className="mini-label" style={{
-                fontSize: '11px',
+                fontSize: '13px',
                 color: '#888'
               }}>涨停</div>
             </div>
@@ -229,7 +291,7 @@ const MarketPulse: React.FC = () => {
                 color: '#f38ba8'
               }}>{adData.limitDownCount}</div>
               <div className="mini-label" style={{
-                fontSize: '11px',
+                fontSize: '13px',
                 color: '#888'
               }}>跌停</div>
             </div>
@@ -247,14 +309,14 @@ const MarketPulse: React.FC = () => {
               color: '#888',
               marginBottom: '4px'
             }}>炸板率</div>
-            <div className={`bomb-board-rate ${adData.bombBoardRate > 30 ? 'danger' : ''}`} style={{
+            <div className={`bomb-board-rate ${adData.bombBoardRate > 50 ? 'high-danger' : adData.bombBoardRate > 30 ? 'medium-danger' : adData.bombBoardRate > 15 ? 'low-danger' : 'safe'}`} style={{
               fontSize: '24px',
               fontWeight: '700',
-              color: '#f38ba8',
-              animation: adData.bombBoardRate > 30 ? 'breathing 1s infinite' : 'none'
-            }}>{adData.bombBoardRate}%</div>
+              color: adData.bombBoardRate > 50 ? '#ef4444' : adData.bombBoardRate > 30 ? '#f59e0b' : adData.bombBoardRate > 15 ? '#a6e3a1' : '#6b7280',
+              animation: adData.bombBoardRate > 50 ? 'breathingHigh 0.8s infinite' : adData.bombBoardRate > 30 ? 'breathingMedium 1s infinite' : adData.bombBoardRate > 15 ? 'breathingLow 1.5s infinite' : 'none'
+            }}>{formatPercentToFixed2(adData.bombBoardRate)}</div>
             <div className="bomb-board-count" style={{
-              fontSize: '11px',
+              fontSize: '13px',
               color: '#666',
               marginTop: '4px'
             }}>{adData.bombBoardCount}家炸板</div>
@@ -310,7 +372,7 @@ const MarketPulse: React.FC = () => {
               fontWeight: '600',
               color: volumeForecast.growthRate >= 0 ? '#a6e3a1' : '#f38ba8'
             }}>
-              {volumeForecast.growthRate >= 0 ? '+' : ''}{volumeForecast.growthRate}%
+              {formatPercentToFixed2(volumeForecast.growthRate)}
             </div>
           </div>
           <div className="volume-details" style={{
@@ -321,6 +383,153 @@ const MarketPulse: React.FC = () => {
           }}>
             <span>当前: {volumeForecast.currentVolume}亿</span>
             <span>昨日: {volumeForecast.yesterdayVolume}亿</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 板块联动矩阵 */}
+      <div className="section" style={{
+        marginBottom: '24px'
+      }}>
+        <h4 style={{
+          margin: '0 0 12px 0',
+          fontSize: '14px',
+          color: '#bbb',
+          fontWeight: '500'
+        }}>板块联动矩阵</h4>
+        <div className="linkage-matrix-container" style={{
+          backgroundColor: '#2a2a3a',
+          borderRadius: '8px',
+          padding: '12px',
+          overflowX: 'auto',
+          overflowY: 'auto',
+          maxHeight: '300px'
+        }}>
+          <table className="linkage-matrix" style={{
+            width: '100%',
+            borderCollapse: 'collapse',
+            fontSize: '12px'
+          }}>
+            <thead>
+              <tr style={{
+                height: '40px'
+              }}>
+                <th style={{
+                  backgroundColor: '#1e1e2e',
+                  color: '#fff',
+                  padding: '8px',
+                  textAlign: 'center',
+                  position: 'sticky',
+                  left: 0,
+                  zIndex: 2
+                }}></th>
+                {sectorLinkageMatrix.sectors.map((sector, index) => (
+                  <th key={index} style={{
+                    backgroundColor: '#1e1e2e',
+                    color: '#fff',
+                    padding: '8px',
+                    textAlign: 'center',
+                    position: 'sticky',
+                    top: 0,
+                    zIndex: 2
+                  }}>
+                    {sector}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {sectorLinkageMatrix.sectors.map((sourceSector, rowIndex) => (
+                <tr key={rowIndex} style={{
+                  height: '40px'
+                }}>
+                  <td style={{
+                    backgroundColor: '#1e1e2e',
+                    color: '#fff',
+                    padding: '8px',
+                    textAlign: 'center',
+                    position: 'sticky',
+                    left: 0,
+                    zIndex: 1,
+                    fontWeight: '500'
+                  }}>
+                    {sourceSector}
+                  </td>
+                  {sectorLinkageMatrix.sectors.map((targetSector, colIndex) => {
+                    // 找到对应的联动数据
+                    const linkage = sectorLinkageMatrix.linkageData.find(
+                      l => l.sourceSector === sourceSector && l.targetSector === targetSector
+                    );
+                    
+                    // 如果是对角线或没有联动数据，显示空白
+                    if (rowIndex === colIndex || !linkage) {
+                      return (
+                        <td key={colIndex} style={{
+                          backgroundColor: '#1e1e2e',
+                          padding: '4px',
+                          textAlign: 'center'
+                        }}></td>
+                      );
+                    }
+                    
+                    // 获取联动颜色和透明度
+                    const linkageColor = getLinkageColor(linkage.correlation);
+                    const linkageOpacity = getLinkageOpacity(linkage.correlation);
+                    
+                    return (
+                      <td 
+                        key={colIndex} 
+                        style={{
+                          backgroundColor: `${linkageColor}${Math.round(linkageOpacity * 255).toString(16).padStart(2, '0')}`,
+                          color: linkageColor,
+                          padding: '4px',
+                          textAlign: 'center',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease'
+                        }}
+                        title={`联动强度: ${linkage.correlation}%
+滞后时间: ${linkage.lagTime}分钟`}
+                      >
+                        <div style={{
+                          fontWeight: '600'
+                        }}>
+                          {linkage.correlation > 0 ? '+' : ''}{linkage.correlation}%
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="linkage-legend" style={{
+          display: 'flex',
+          justifyContent: 'center',
+          gap: '12px',
+          marginTop: '12px',
+          fontSize: '13px',
+          color: '#666'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <div style={{ width: '12px', height: '12px', backgroundColor: '#ef4444', borderRadius: '2px' }}></div>
+            <span>强正相关</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <div style={{ width: '12px', height: '12px', backgroundColor: '#f59e0b', borderRadius: '2px' }}></div>
+            <span>中度正相关</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <div style={{ width: '12px', height: '12px', backgroundColor: '#6b7280', borderRadius: '2px' }}></div>
+            <span>弱相关</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <div style={{ width: '12px', height: '12px', backgroundColor: '#3b82f6', borderRadius: '2px' }}></div>
+            <span>中度负相关</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <div style={{ width: '12px', height: '12px', backgroundColor: '#1d4ed8', borderRadius: '2px' }}></div>
+            <span>强负相关</span>
           </div>
         </div>
       </div>
@@ -360,11 +569,11 @@ const MarketPulse: React.FC = () => {
                 <div style={{
                   display: 'flex',
                   gap: '12px',
-                  fontSize: '11px',
+                  fontSize: '13px',
                   color: '#666'
                 }}>
-                  <span>涨跌幅: <span style={{ color: sector.change >= 0 ? '#22c55e' : '#ef4444' }}>{sector.change >= 0 ? '+' : ''}{sector.change}%</span></span>
-                  <span>资金: <span style={{ color: getFundFlowColor(sector.fundFlow) }}>{sector.fundFlow >= 0 ? '+' : ''}{sector.fundFlow}亿</span></span>
+                  <span>涨跌幅: <span style={{ color: sector.change >= 0 ? '#22c55e' : '#ef4444' }}>{formatPercentToFixed2(sector.change)}</span></span>
+                  <span>资金: <span style={{ color: getFundFlowColor(sector.fundFlow) }}>{sector.fundFlow >= 0 ? '+' : ''}{formatNumberToFixed2(sector.fundFlow)}亿</span></span>
                 </div>
               </div>
               <div className="heat-indicator" style={{
@@ -408,15 +617,39 @@ const MarketPulse: React.FC = () => {
         }
       }
 
-      /* 红色呼吸灯动画 */
-      @keyframes breathing {
+      /* 低风险呼吸灯动画 */
+        @keyframes breathingLow {
+        0%, 100% {
+          color: #a6e3a1;
+          text-shadow: 0 0 4px rgba(166, 227, 161, 0.5);
+        }
+        50% {
+          color: #22c55e;
+          text-shadow: 0 0 8px rgba(34, 197, 94, 0.8);
+        }
+      }
+
+        /* 中风险呼吸灯动画 */
+        @keyframes breathingMedium {
+        0%, 100% {
+          color: #fbbf24;
+          text-shadow: 0 0 4px rgba(251, 191, 36, 0.5);
+        }
+        50% {
+          color: #f59e0b;
+          text-shadow: 0 0 10px rgba(245, 158, 11, 0.8);
+        }
+      }
+
+        /* 高风险呼吸灯动画 */
+        @keyframes breathingHigh {
         0%, 100% {
           color: #f38ba8;
           text-shadow: 0 0 4px rgba(243, 139, 168, 0.5);
         }
         50% {
-          color: #ff5577;
-          text-shadow: 0 0 12px rgba(255, 85, 119, 0.8);
+          color: #ef4444;
+          text-shadow: 0 0 14px rgba(239, 68, 68, 0.9);
         }
       }
 

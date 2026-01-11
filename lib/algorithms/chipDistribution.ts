@@ -1016,7 +1016,7 @@ export function calculateEnhancedChipDistribution(
       wadData: [],
       enhancedConcentration: 0,
       enhancedMainCost: 0,
-      enhancedSupportResistance: { supportLevels: [], resistanceLevels: [] }
+      enhancedSupportResistance: { supportLevels: [], resistanceLevels: [], strongestSupport: null, strongestResistance: null, supportResistanceRatio: 0 }
     };
   }
   

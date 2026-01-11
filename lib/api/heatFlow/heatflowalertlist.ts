@@ -9,6 +9,7 @@ export interface HeatFlowAlertListParams {
   alertLevel?: string;
   pageNum?: number;
   pageSize?: number;
+  stockCode?: string;
 }
 
 // 定义响应数据接口
@@ -21,8 +22,8 @@ export interface HeatFlowAlertItem {
 }
 
 // Mock数据生成器
-export const generateHeatFlowAlertListMock: MockDataGenerator<HeatFlowAlertItem> = async (params: HeatFlowAlertListParams) => {
-  const { stockCode = 'SH600000' } = params || {};
+export const generateHeatFlowAlertListMock: MockDataGenerator<PaginationResponse<HeatFlowAlertItem>> = async (params: HeatFlowAlertListParams) => {
+  const { stockCode = 'SH600000', pageNum = 1, pageSize = 10 } = params || {};
   
   // 模拟股票名称
   const stockNameMap: Record<string, string> = {
@@ -39,13 +40,23 @@ export const generateHeatFlowAlertListMock: MockDataGenerator<HeatFlowAlertItem>
   const now = new Date();
   const date = formatDateTime(now);
   
-  // TODO: 实现具体的模拟数据生成逻辑
+  // 生成模拟数据列表
+  const list: HeatFlowAlertItem[] = [];
+  for (let i = 0; i < pageSize; i++) {
+    list.push({
+      stockCode,
+      stockName,
+      date
+    });
+  }
+  
+  // 返回分页响应数据
   return {
-    // 基础模拟数据结构
-    stockCode,
-    stockName,
-    date
-    // 添加更多字段...
+    list,
+    total: 100, // 模拟总记录数
+    pageNum,
+    pageSize,
+    pages: Math.ceil(100 / pageSize) // 模拟总页数
   };
 };
 
@@ -60,7 +71,7 @@ export async function fetchHeatFlowAlertList(
     if (process.env.NEXT_PUBLIC_API_MOCK === 'true') {
       console.info('Mock mode enabled, using mock data directly');
       dataSource = 'Mock';
-      return apiGet<HeatFlowAlertItem>(
+      return apiGet<PaginationResponse<HeatFlowAlertItem>>(
         '/heat/flow/alert/list',
         params,
         { requiresAuth: false },
@@ -71,7 +82,7 @@ export async function fetchHeatFlowAlertList(
     // 2. 尝试调用本地后端API
     try {
       console.info('Trying to fetch from local backend API');
-      const response = await apiGet<HeatFlowAlertItem>(
+      const response = await apiGet<PaginationResponse<HeatFlowAlertItem>>(
         '/heat/flow/alert/list',
         params,
         { requiresAuth: false }
@@ -92,7 +103,7 @@ export async function fetchHeatFlowAlertList(
   
   // 最终回退到模拟数据
   console.info('All data sources failed, using mock data');
-  const mockResponse = await apiGet<HeatFlowAlertItem>(
+  const mockResponse = await apiGet<PaginationResponse<HeatFlowAlertItem>>(
     '/heat/flow/alert/list',
     params,
     { requiresAuth: false },
