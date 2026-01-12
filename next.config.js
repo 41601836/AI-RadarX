@@ -50,16 +50,16 @@ const nextConfig = {
     NEXT_PUBLIC_API_VERSION: 'v1',
   },
   
-  // 跨域请求配置
-  async rewrites() {
-    return [
-      // API路由重写（如果需要）
-      {
-        source: '/api/:path*',
-        destination: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1/:path*',
-      },
-    ];
-  },
+  // 移除API重写配置，直接使用app/api目录下的路由
+  // async rewrites() {
+  //   return [
+  //     // API路由重写（如果需要）
+  //     {
+  //       source: '/api/:path*',
+  //       destination: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1/:path*',
+  //     },
+  //   ];
+  // },
   
   // 构建输出优化
   output: 'standalone',

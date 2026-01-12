@@ -157,7 +157,7 @@ export async function fetchHeatFlowAlertList(
   params: HeatFlowAlertParams
 ): Promise<ApiResponse<PaginationResponse<HeatFlowAlertItem>>> {
   return apiGet<PaginationResponse<HeatFlowAlertItem>>(
-    '/heat-flow/alert/list',
+    '/v1/heat/flow/alert/list',
     params,
     { requiresAuth: false },
     generateHeatFlowAlertMock

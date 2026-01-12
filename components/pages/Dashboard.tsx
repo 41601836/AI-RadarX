@@ -10,6 +10,11 @@ import DataHealth from '../DataHealth';
 import IntelligenceBrief from '../IntelligenceBrief';
 import ARadarPanel from '../ARadarPanel';
 import SmartThresholdRadar from '../SmartThresholdRadar';
+import PublicOpinionList from '../PublicOpinionList';
+import RiskAssessment from '../RiskAssessment';
+import TechIndicatorPanel from '../TechIndicatorPanel';
+import MarketSentimentDashboard from '../MarketSentimentDashboard';
+import HeatFlowMonitor from '../HeatFlowMonitor';
 import { fetchHeatFlowAlertList, HeatFlowAlertItem } from '../../lib/api/heatFlow/alert';
 import { StockBasicInfo } from '../../lib/api/market';
 import { useStockContext } from '../../lib/context/StockContext';
@@ -262,6 +267,11 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="dashboard">
+      {/* 市场情绪看板作为主要内容 */}
+      <div className="market-sentiment-section">
+        <MarketSentimentDashboard />
+      </div>
+      
       {/* 四栏布局：左侧市场状态、中间主内容、右侧雷达面板、最右侧情报简报 */}
       <div className="dashboard-main four-column-layout">
         {/* 左侧F1: MARKET_STATUS面板 */}
@@ -352,17 +362,34 @@ const Dashboard: React.FC = () => {
               )}
             </div>
 
-            {/* 底部：热流警报 */}
-            <div className="panel heat-flow-alerts">
-              <h2>热流警报</h2>
-              <div className="alerts-list">
-                {alertData.map((alert, idx) => (
-                  <div key={idx} className="alert-item">
-                    <span className="alert-time">{new Date(alert.alertTime).toLocaleTimeString()}</span>
-                    <span className="alert-content">{alert.alertDesc}</span>
-                  </div>
-                ))}
-              </div>
+            {/* 热钱流向监控 */}
+            <div className="panel heat-flow-monitor">
+              <h2>热钱流向监控</h2>
+              <HeatFlowMonitor 
+                initialAlertLevel="high"
+              />
+            </div>
+            
+            {/* 舆情监控 */}
+            <div className="panel public-opinion-monitor">
+              <h2>舆情监控</h2>
+              <PublicOpinionList 
+                symbol={currentTicker?.ts_code || "SH600000"}
+              />
+            </div>
+            
+            {/* 风险评估 */}
+            <div className="panel risk-assessment">
+              <h2>账户风险评估</h2>
+              <RiskAssessment />
+            </div>
+            
+            {/* 技术指标 */}
+            <div className="panel tech-indicator">
+              <h2>技术指标分析</h2>
+              <TechIndicatorPanel 
+                symbol={currentTicker?.ts_code || "SH600000"}
+              />
             </div>
           </div>
         </main>
@@ -412,14 +439,19 @@ const Dashboard: React.FC = () => {
         }
 
         /* 左侧市场状态面板 */
-        .dashboard-market-status {
-          border-right: 1px solid #333;
-          padding: 16px;
-          overflow-y: auto;
-          background: #000;
-          height: 100%;
-          position: relative;
-        }
+        .market-sentiment-section {
+        height: 400px;
+        border-bottom: 1px solid #333;
+      }
+
+      .dashboard-market-status {
+        border-right: 1px solid #333;
+        padding: 16px;
+        overflow-y: auto;
+        background: #000;
+        height: calc(100vh - 400px);
+        position: relative;
+      }
 
         /* 左侧主内容 */
         .dashboard-content {
@@ -427,7 +459,7 @@ const Dashboard: React.FC = () => {
           display: flex;
           flex-direction: column;
           padding: 16px;
-          height: 100%;
+          height: calc(100vh - 400px);
           position: relative;
         }
 
@@ -435,7 +467,7 @@ const Dashboard: React.FC = () => {
         .content-grid {
           display: grid;
           grid-template-columns: repeat(2, 1fr);
-          grid-template-rows: repeat(3, 1fr);
+          grid-template-rows: repeat(6, 1fr);
           gap: 16px;
           height: 100%;
           overflow: hidden;
@@ -465,7 +497,22 @@ const Dashboard: React.FC = () => {
           grid-row: span 1;
         }
 
-        .heat-flow-alerts {
+        .heat-flow-monitor {
+          grid-row: span 1;
+          grid-column: span 2;
+        }
+        
+        .public-opinion-monitor {
+          grid-row: span 1;
+          grid-column: span 2;
+        }
+        
+        .risk-assessment {
+          grid-row: span 1;
+          grid-column: span 2;
+        }
+        
+        .tech-indicator {
           grid-row: span 1;
           grid-column: span 2;
         }
@@ -476,7 +523,7 @@ const Dashboard: React.FC = () => {
           padding: 16px;
           overflow-y: auto;
           background: #000;
-          height: 100%;
+          height: calc(100vh - 400px);
           position: relative;
         }
 
@@ -486,7 +533,7 @@ const Dashboard: React.FC = () => {
           padding: 16px;
           overflow-y: auto;
           background: #000;
-          height: 100%;
+          height: calc(100vh - 400px);
           position: relative;
         }
       `}</style>

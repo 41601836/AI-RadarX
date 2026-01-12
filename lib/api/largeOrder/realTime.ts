@@ -174,8 +174,8 @@ export async function fetchLargeOrderRealTime(
       throw invalidLargeOrderThresholdError('大单阈值必须大于0');
     }
 
-    // 使用统一的 apiGet 函数
-    return await apiGet<LargeOrderRealTimeData>('/order/large/real-time', params, {
+    // 使用统一的 apiGet 函数，添加/v1前缀
+    return await apiGet<LargeOrderRealTimeData>('/v1/order/large/real-time', params, {
       requiresAuth: false
     }, generateLargeOrderRealTimeMock);
   } catch (error) {

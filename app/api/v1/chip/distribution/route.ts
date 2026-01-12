@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { apiHandler } from '@/lib/api/common/handler';
 import { errorResponse, badRequestError, stockCodeFormatError } from '@/lib/api/common/errors';
-import { fetchChipDistribution } from '@/lib/api/chip/distribution';
+import { generateChipDistributionMock } from '@/lib/api/chip/distribution';
+import { ChipDistributionParams } from '@/lib/api/chip/distribution';
 
 /**
  * 获取单只股票筹码分布数据
@@ -26,8 +27,9 @@ async function handleChipDistributionRequest(request: NextRequest) {
     throw stockCodeFormatError('股票代码格式错误，应为SH/SZ开头的6位数字');
   }
   
-  // 调用业务逻辑获取筹码分布数据
-  const chipDistributionData = await fetchChipDistribution({ stockCode, startDate, endDate });
+  // 直接调用Mock数据生成器，避免循环调用
+  const params: ChipDistributionParams = { stockCode, startDate, endDate };
+  const chipDistributionData = await generateChipDistributionMock(params);
   
   return chipDistributionData;
 }

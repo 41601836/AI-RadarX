@@ -267,19 +267,23 @@ export async function fetchChipDistribution(
     if (process.env.NEXT_PUBLIC_API_MOCK === 'true') {
       console.info('Mock mode enabled, using mock data directly');
       dataSource = 'Mock';
-      return apiGet<ChipDistributionData>(
-        '/chip/distribution',
-        params,
-        { requiresAuth: false },
-        generateChipDistributionMock
-      );
+      // 直接调用Mock数据生成器，而不是通过apiGet，避免循环调用
+      const mockData = await generateChipDistributionMock(params);
+      // 构造完整的ApiResponse格式
+      return {
+        code: 200,
+        msg: 'success',
+        data: mockData,
+        requestId: `req-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`,
+        timestamp: Date.now()
+      };
     }
     
     // 2. 尝试调用本地后端API
     try {
       console.info('Trying to fetch from local backend API');
       const response = await apiGet<ChipDistributionData>(
-        '/chip/distribution',
+        '/v1/chip/distribution',
         params,
         { requiresAuth: false }
       );
@@ -358,7 +362,7 @@ export async function fetchChipDistribution(
   // 5. 最终回退到模拟数据
   console.info('All data sources failed, using mock data');
   const mockResponse = await apiGet<ChipDistributionData>(
-    '/chip/distribution',
+    '/v1/chip/distribution',
     params,
     { requiresAuth: false },
     generateChipDistributionMock

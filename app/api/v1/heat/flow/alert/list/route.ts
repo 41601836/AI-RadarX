@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { apiHandler } from '@/lib/api/common/handler';
 import { errorResponse, badRequestError } from '@/lib/api/common/errors';
-import { fetchHeatFlowAlertList } from '@/lib/api/heatFlow/alert';
+import { generateHeatFlowAlertMock } from '@/lib/api/heatFlow/alert';
+import { successResponse } from '@/lib/api/common/response';
 
 
 /**
@@ -17,14 +18,14 @@ async function handleHeatFlowAlertListRequest(request: NextRequest) {
   const pageNum = searchParams.get('pageNum');
   const pageSize = searchParams.get('pageSize');
 
-  // 调用业务逻辑
-  const result = await fetchHeatFlowAlertList({
+  // 直接调用Mock数据生成器，避免循环调用
+  const mockData = await generateHeatFlowAlertMock({
     alertLevel,
     pageNum: pageNum ? parseInt(pageNum, 10) : 1,
     pageSize: pageSize ? parseInt(pageSize, 10) : 20
   });
   
-  return result;
+  return mockData;
 }
 
 export async function GET(request: NextRequest) {

@@ -1,0 +1,82 @@
+{
+  "/market/sentiment": {
+    "testRuns": 100,
+    "successfulRequests": 0,
+    "failedRequests": 100,
+    "averageTime": 0,
+    "minTime": null,
+    "maxTime": null,
+    "percentiles": {},
+    "concurrent": [
+      {
+        "concurrentUsers": 5,
+        "testDuration": 30,
+        "totalRequests": 2879,
+        "requestsPerSecond": "95.86",
+        "avgResponseTime": 0
+      },
+      {
+        "concurrentUsers": 10,
+        "testDuration": 30,
+        "totalRequests": 3298,
+        "requestsPerSecond": "109.61",
+        "avgResponseTime": 0
+      },
+      {
+        "concurrentUsers": 20,
+        "testDuration": 30,
+        "totalRequests": 4018,
+        "requestsPerSecond": "133.47",
+        "avgResponseTime": 0
+      },
+      {
+        "concurrentUsers": 50,
+        "testDuration": 30,
+        "totalRequests": 3085,
+        "requestsPerSecond": "101.89",
+        "avgResponseTime": 0
+      }
+    ]
+  },
+  "/tech/indicator/data": {
+    "testRuns": 100,
+    "successfulRequests": 0,
+    "failedRequests": 100,
+    "averageTime": 0,
+    "minTime": null,
+    "maxTime": null,
+    "percentiles": {}
+  },
+  "/heat/flow/stock/seat": {
+    "testRuns": 100,
+    "successfulRequests": 100,
+    "failedRequests": 0,
+    "averageTime": 534.6576,
+    "minTime": 511.74199999999837,
+    "maxTime": 703.5348999999987,
+    "percentiles": {
+      "p50": 521.8135000000002,
+      "p90": 558.6851000000024,
+      "p95": 609.4063999999998,
+      "p99": 691.6794999999984
+    }
+  },
+  "/order/large/real-time": {
+    "testRuns": 100,
+    "successfulRequests": 0,
+    "failedRequests": 100,
+    "averageTime": 0,
+    "minTime": null,
+    "maxTime": null,
+    "percentiles": {}
+  },
+  "/public/opinion/list": {
+    "testRuns": 100,
+    "successfulRequests": 0,
+    "failedRequests": 100,
+    "averageTime": 0,
+    "minTime": null,
+    "maxTime": null,
+    "percentiles": {}
+  }
+}

@@ -26,8 +26,8 @@ export interface AccountRiskAssessmentData {
 
 export async function fetchAccountRiskAssessment(): Promise<ApiResponse<AccountRiskAssessmentData>> {
   try {
-    // 实现账户风险评估数据获取逻辑
-    const response = await apiGet<AccountRiskAssessmentData>('/risk/account/assessment');
+    // 实现账户风险评估数据获取逻辑，添加/v1前缀
+    const response = await apiGet<AccountRiskAssessmentData>('/v1/risk/account/assessment');
     
     // 如果账户不存在，返回特定错误
     if (!response.data.accountId) {
