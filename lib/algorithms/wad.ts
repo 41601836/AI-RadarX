@@ -1,5 +1,6 @@
 // WAD（加权平均分布）模型算法实现
 import { ChipDistributionItem, ChipPeak, ChipPeakInfo, SupportResistanceLevel, SupportResistanceLevels } from './chipDistribution';
+import { logger } from '../utils/logger';
 
 // 预计算的时间常数
 const MILLISECONDS_PER_DAY = 1000 * 60 * 60 * 24;
@@ -63,7 +64,7 @@ const DECAY_CONSTANTS = {
 };
 
 // 快速指数计算函数（使用泰勒级数近似，适用于小参数）
-function fastExp(x: number): number {
+export function fastExp(x: number): number {
   // 对于小的x值，使用泰勒级数近似：e^x ≈ 1 + x + x²/2! + x³/6! + x⁴/24! + x⁵/120 + x⁶/720 + x⁷/5040 + x⁸/40320
   // 误差在x ∈ [-1, 1]时小于0.0001
   if (x < -1 || x > 1) {
@@ -71,18 +72,29 @@ function fastExp(x: number): number {
   }
   
   // 优化：使用高精度泰勒级数展开（增加到x⁸项）
+  // 预计算所有幂次，减少乘法运算
   const x2 = x * x;
   const x3 = x2 * x;
-  const x4 = x3 * x;
-  const x5 = x4 * x;
-  const x6 = x5 * x;
-  const x7 = x6 * x;
-  const x8 = x7 * x;
+  const x4 = x2 * x2;
+  const x5 = x3 * x2;
+  const x6 = x4 * x2;
+  const x7 = x5 * x2;
+  const x8 = x4 * x4;
+  
   return 1 + x + x2/2 + x3/6 + x4/24 + x5/120 + x6/720 + x7/5040 + x8/40320;
 }
 
 // 快速批量指数计算（SIMD-like优化）
-function fastBatchExp(values: number[]): number[] {
+function fastBatchExp(values: Float64Array): Float64Array {
+  const result = new Float64Array(values.length);
+  for (let i = 0; i < values.length; i++) {
+    result[i] = fastExp(values[i]);
+  }
+  return result;
+}
+
+// 快速批量指数计算（普通数组版本）
+function fastBatchExpArray(values: number[]): number[] {
   const result = new Array(values.length);
   for (let i = 0; i < values.length; i++) {
     result[i] = fastExp(values[i]);
@@ -117,69 +129,69 @@ export function calculateBatchDecayWeights(
 ): number[] {
   const result = new Array(timestamps.length);
   let factor: number;
-  switch (timeUnit) {
-    case 'day':
-      factor = DECAY_CONSTANTS.DAY_FACTOR;
-      break;
-    case 'hour':
-      factor = DECAY_CONSTANTS.HOUR_FACTOR;
-      break;
-    case 'minute':
-      factor = DECAY_CONSTANTS.MINUTE_FACTOR;
-      break;
-    case 'second':
-      factor = DECAY_CONSTANTS.SECOND_FACTOR;
-      break;
-    default:
-      factor = DECAY_CONSTANTS.DAY_FACTOR;
-  }
+  
+  // 使用对象查找替代switch语句，提高性能
+  const timeFactorMap = {
+    day: DECAY_CONSTANTS.DAY_FACTOR,
+    hour: DECAY_CONSTANTS.HOUR_FACTOR,
+    minute: DECAY_CONSTANTS.MINUTE_FACTOR,
+    second: DECAY_CONSTANTS.SECOND_FACTOR
+  };
+  
+  factor = timeFactorMap[timeUnit] || DECAY_CONSTANTS.DAY_FACTOR;
   
   // 预计算衰减因子
   const decayFactor = -decayRate;
   
   // 检查是否有预计算的衰减系数可用
-  let precomputedCoefficients: { [key: number]: number } | undefined;
-  switch (timeUnit) {
-    case 'day':
-      precomputedCoefficients = DECAY_CONSTANTS.PRECOMPUTED_DECAY_COEFFICIENTS.DAILY;
-      break;
-    case 'hour':
-      precomputedCoefficients = DECAY_CONSTANTS.PRECOMPUTED_DECAY_COEFFICIENTS.HOURLY;
-      break;
-    case 'minute':
-      precomputedCoefficients = DECAY_CONSTANTS.PRECOMPUTED_DECAY_COEFFICIENTS.MINUTELY;
-      break;
-    default:
-      precomputedCoefficients = undefined;
-  }
+  const coefficientMap = {
+    day: DECAY_CONSTANTS.PRECOMPUTED_DECAY_COEFFICIENTS.DAILY as Record<number, number>,
+    hour: DECAY_CONSTANTS.PRECOMPUTED_DECAY_COEFFICIENTS.HOURLY as Record<number, number>,
+    minute: DECAY_CONSTANTS.PRECOMPUTED_DECAY_COEFFICIENTS.MINUTELY as Record<number, number>
+  };
   
-  let usePrecomputed = false;
-  let precomputedCoeff = 1.0;
+  // 只对支持的timeUnit使用预计算系数
+  const precomputedCoefficients = coefficientMap[timeUnit as keyof typeof coefficientMap];
+  // 检查衰减率是否有预计算值
+  const usePrecomputed = precomputedCoefficients && precomputedCoefficients[decayRate] !== undefined;
   
-  if (precomputedCoefficients && precomputedCoefficients[decayRate] !== undefined) {
-    usePrecomputed = true;
-    precomputedCoeff = precomputedCoefficients[decayRate];
-  }
+  // 对于大批量计算，使用Float64Array提高性能
+  const useFastBatchExp = timestamps.length > 100 && timestamps.length < 10000;
   
-  // 预计算常用时间差的权重（用于小批量计算）
-  const useFastExp = timestamps.length < 1000; // 小批量使用快速指数近似
-  
-  // 并行计算权重，减少函数调用开销
-  for (let i = 0; i < timestamps.length; i++) {
-    const timeDiff = currentTime - timestamps[i];
-    const timeUnitDiff = timeDiff * factor;
-    const exponent = decayFactor * timeUnitDiff;
-    
-    if (usePrecomputed && timeUnit === 'day' && timeUnitDiff < 31) {
-      // 使用预计算的查找表（每日衰减，30天内）
-      const dayIndex = Math.floor(timeUnitDiff);
-      result[i] = DECAY_CONSTANTS.BATCH_DECAY_LOOKUP_TABLES.DAILY_30DAYS[dayIndex];
-    } else if (useFastExp) {
-      // 小批量使用快速指数近似
-      result[i] = fastExp(exponent);
-    } else {
-      // 大批量使用标准指数计算
-      result[i] = Math.exp(exponent);
+  if (usePrecomputed && timeUnit === 'day') {
+    // 使用预计算的查找表（每日衰减，30天内）
+    for (let i = 0; i < timestamps.length; i++) {
+      const timeDiff = currentTime - timestamps[i];
+      const timeUnitDiff = timeDiff * factor;
+      if (timeUnitDiff < 31) {
+        const dayIndex = Math.floor(timeUnitDiff);
+        result[i] = DECAY_CONSTANTS.BATCH_DECAY_LOOKUP_TABLES.DAILY_30DAYS[dayIndex];
+      } else {
+        // 超出预计算范围，使用指数计算
+        const exponent = decayFactor * timeUnitDiff;
+        result[i] = Math.exp(exponent);
+      }
+    }
+  } else if (useFastBatchExp) {
+    // 大批量使用快速批量指数计算
+    const exponents = new Float64Array(timestamps.length);
+    for (let i = 0; i < timestamps.length; i++) {
+      const timeDiff = currentTime - timestamps[i];
+      const timeUnitDiff = timeDiff * factor;
+      exponents[i] = decayFactor * timeUnitDiff;
+    }
+    const weights = fastBatchExp(exponents);
+    // 转换为普通数组
+    for (let i = 0; i < weights.length; i++) {
+      result[i] = weights[i];
+    }
+  } else {
+    // 小批量或超大批量使用普通指数计算
+    for (let i = 0; i < timestamps.length; i++) {
+      const timeDiff = currentTime - timestamps[i];
+      const timeUnitDiff = timeDiff * factor;
+      const exponent = decayFactor * timeUnitDiff;
+      result[i] = timestamps.length < 1000 ? fastExp(exponent) : Math.exp(exponent);
     }
   }
   
@@ -316,6 +328,9 @@ export function calculateCumulativeWAD(
   rawIncrement: number;
   weight: number;
 }> {
+  const timerLabel = 'calculateCumulativeWAD';
+  logger.time(timerLabel);
+  
   const { 
     decayRate = 0.1, 
     weightType = 'time',
@@ -324,33 +339,33 @@ export function calculateCumulativeWAD(
   } = options;
   
   const dataLength = data.length;
-  if (dataLength === 0) return [];
+  if (dataLength === 0) {
+    logger.timeEnd(timerLabel);
+    return [];
+  }
   
   // 预计算衰减因子
   const decayFactor = -decayRate;
+  const currentTime = Date.now();
   
   // 性能优化：预分配结果数组
   const result = new Array(dataLength);
   let cumulativeWAD = 0;
   let cumulativeWeightedWAD = 0;
-  const currentTime = Date.now();
   
-  // 性能优化：避免spread操作，直接创建排序数组
-  const sortedData = new Array(dataLength);
-  for (let i = 0; i < dataLength; i++) {
-    sortedData[i] = data[i];
-  }
+  // 直接在原数组上排序，避免创建新数组（如果允许的话）
+  // 或者使用TypedArray提高性能
+  const sortedData = [...data];
   sortedData.sort((a, b) => a.timestamp - b.timestamp);
   
   // 批量预计算权重（如果可能）
   let weights: number[] | undefined;
   if (useExponentialDecay) {
+    const timestamps = sortedData.map(item => item.timestamp);
+    
     if (weightType === 'time') {
-      const timestamps = sortedData.map(item => item.timestamp);
       weights = calculateBatchDecayWeights(timestamps, currentTime, decayRate);
     } else if (weightType === 'volume') {
-      // 批量预计算成交量衰减权重
-      const timestamps = sortedData.map(item => item.timestamp);
       const volumes = sortedData.map(item => item.volume || 0);
       weights = calculateBatchVolumeDecayWeights(timestamps, currentTime, volumes, decayRate);
     }
@@ -359,8 +374,25 @@ export function calculateCumulativeWAD(
   // 使用局部变量缓存提高访问速度
   let previousClose = sortedData[0].close;
   
-  for (let i = 0; i < dataLength; i++) {
-    const item = sortedData[i];
+  // 对于大批量数据，使用循环展开优化
+  const unrollFactor = 4;
+  let i = 0;
+  
+  // 循环展开处理
+  for (; i < dataLength - unrollFactor + 1; i += unrollFactor) {
+    for (let j = 0; j < unrollFactor; j++) {
+      const index = i + j;
+      const item = sortedData[index];
+      processSingleItem(item, index);
+    }
+  }
+  
+  // 处理剩余项
+  for (; i < dataLength; i++) {
+    processSingleItem(sortedData[i], i);
+  }
+  
+  function processSingleItem(item: WADItem, index: number) {
     const high = item.high;
     const low = item.low;
     const close = item.close;
@@ -385,27 +417,27 @@ export function calculateCumulativeWAD(
         // 内联计算成交量加权衰减权重
         const timeDiff = currentTime - timestamp;
         const daysDiff = timeDiff / MILLISECONDS_PER_DAY;
-        const timeWeight = Math.exp(decayFactor * daysDiff); // 使用预计算的负数衰减因子
+        const timeWeight = Math.exp(decayFactor * daysDiff);
         const volumeWeight = item.volume / MAX_VOLUME;
         const normalizedVolumeWeight = volumeWeight > 1 ? 1 : volumeWeight;
         weight = timeWeight * normalizedVolumeWeight;
       } else if (weights) {
         // 使用批量预计算的权重
-        weight = weights[i];
+        weight = weights[index];
       } else {
         // 内联计算时间衰减权重
         const timeDiff = currentTime - timestamp;
         const daysDiff = timeDiff / MILLISECONDS_PER_DAY;
-        weight = Math.exp(decayFactor * daysDiff); // 使用预计算的负数衰减因子
+        weight = Math.exp(decayFactor * daysDiff);
       }
     }
     
-    // 累积WAD（使用直接赋值避免重复计算）
+    // 累积WAD
     cumulativeWAD += wadIncrement;
     cumulativeWeightedWAD += wadIncrement * weight;
     
-    // 直接设置数组元素，避免push操作的开销
-    result[i] = {
+    // 直接设置数组元素
+    result[index] = {
       timestamp,
       wad: cumulativeWAD,
       weightedWad: cumulativeWeightedWAD,
@@ -840,19 +872,44 @@ export function calculateWADEnhancedChipDistribution(
   };
 }
 
+// 计算筹码集中度指标（包括HHI、基尼系数和集中度比率）
+export interface ChipConcentrationMetrics {
+  hhi: number; // 赫芬达尔-赫希曼指数（0-1）
+  gini: number; // 基尼系数（0-1）
+  concentrationRatio: number; // 前N个最大筹码的集中度比率（0-1）
+  concentrationLevel: 'low' | 'medium' | 'high'; // 集中度等级
+}
+
+// 计算基尼系数
+export function calculateGini(chipData: ChipDistributionItem[]): number {
+  if (chipData.length === 0) return 0;
+  
+  // 确保数据按百分比排序
+  const sortedData = [...chipData].sort((a, b) => a.percentage - b.percentage);
+  const n = sortedData.length;
+  let gini = 0;
+  let cumulativePercentage = 0;
+  
+  for (let i = 0; i < n; i++) {
+    cumulativePercentage += sortedData[i].percentage;
+    gini += (2 * (i + 1) - n - 1) * sortedData[i].percentage;
+  }
+  
+  gini = gini / (n * cumulativePercentage);
+  return Math.min(1, Math.max(0, gini));
+}
+
 // 计算赫芬达尔-赫希曼指数（HHI）
 export function calculateHHI(chipData: ChipDistributionItem[]): number {
   if (chipData.length === 0) return 0;
   
   // 计算赫芬达尔-赫希曼指数：HHI = Σ(percentage^2)
-  // 优化：使用高精度累加器和内联计算，避免不必要的函数调用
   let hhi = 0.0;
   const length = chipData.length;
   
   // 使用普通for循环和类型断言，避免隐式转换
   for (let i = 0; i < length; i++) {
     const percentage = chipData[i].percentage;
-    // 直接使用高精度计算，避免toFixed导致的精度损失
     hhi += percentage * percentage;
   }
   
@@ -860,10 +917,82 @@ export function calculateHHI(chipData: ChipDistributionItem[]): number {
   return Math.min(1, Math.max(0, hhi));
 }
 
-// 识别筹码峰值
-export function identifyChipPeaks(chipData: ChipDistributionItem[], isSorted: boolean = false): ChipPeakInfo {
+// 计算集中度比率（前N个最大筹码的集中度比率）
+export function calculateConcentrationRatio(chipData: ChipDistributionItem[], topN: number = 10): number {
+  if (chipData.length === 0) return 0;
+  
+  // 按百分比降序排序
+  const sortedData = [...chipData].sort((a, b) => b.percentage - a.percentage);
+  const actualN = Math.min(topN, sortedData.length);
+  
+  let totalTopPercentage = 0;
+  let totalPercentage = 0;
+  
+  for (let i = 0; i < sortedData.length; i++) {
+    const percentage = sortedData[i].percentage;
+    totalPercentage += percentage;
+    
+    if (i < actualN) {
+      totalTopPercentage += percentage;
+    }
+  }
+  
+  return totalPercentage > 0 ? totalTopPercentage / totalPercentage : 0;
+}
+
+// 综合计算筹码集中度
+export function calculateChipConcentration(chipData: ChipDistributionItem[]): ChipConcentrationMetrics {
   if (chipData.length === 0) {
-    const emptyPeak: ChipPeak = {
+    return {
+      hhi: 0,
+      gini: 0,
+      concentrationRatio: 0,
+      concentrationLevel: 'low'
+    };
+  }
+  
+  const hhi = calculateHHI(chipData);
+  const gini = calculateGini(chipData);
+  const concentrationRatio = calculateConcentrationRatio(chipData, 10);
+  
+  // 综合评估集中度等级
+  let concentrationLevel: 'low' | 'medium' | 'high' = 'low';
+  const avgConcentration = (hhi + gini + concentrationRatio) / 3;
+  
+  if (avgConcentration > 0.6) {
+    concentrationLevel = 'high';
+  } else if (avgConcentration > 0.3) {
+    concentrationLevel = 'medium';
+  }
+  
+  return {
+    hhi,
+    gini,
+    concentrationRatio,
+    concentrationLevel
+  };
+}
+
+// 增强的筹码峰值分析
+export interface EnhancedChipPeak extends ChipPeak {
+  continuity: number; // 峰值的连续性（0-1）
+  isolation: number; // 峰值的孤立性（0-1）
+  priceDistanceToVWAP: number; // 距离VWAP的价格距离
+  trendAlignment: number; // 与价格趋势的一致性（0-1）
+  supportResistancePotential: number; // 成为支撑/阻力位的潜力（0-1）
+}
+
+export interface EnhancedChipPeakInfo extends ChipPeakInfo {
+  enhancedPeaks: EnhancedChipPeak[];
+  peakDistribution: 'single' | 'double' | 'multiple' | 'scattered'; // 峰值分布类型
+  totalPeakVolume: number; // 所有峰值的总成交量
+  peakVolumeRatio: number; // 峰值成交量占总成交量的比例
+}
+
+// 识别筹码峰值（增强版）
+export function identifyChipPeaks(chipData: ChipDistributionItem[], isSorted: boolean = false): EnhancedChipPeakInfo {
+  if (chipData.length === 0) {
+    const emptyPeak: EnhancedChipPeak = {
       price: 0,
       ratio: 0,
       volume: 0,
@@ -872,18 +1001,27 @@ export function identifyChipPeaks(chipData: ChipDistributionItem[], isSorted: bo
       strength: 0,
       reliability: 0,
       centerPrice: 0,
-      volumeWeightedPrice: 0
+      volumeWeightedPrice: 0,
+      continuity: 0,
+      isolation: 0,
+      priceDistanceToVWAP: 0,
+      trendAlignment: 0,
+      supportResistancePotential: 0
     };
     return {
       peakPrice: 0,
       peakRatio: 0,
       isSinglePeak: true,
       peaks: [],
-      dominantPeak: emptyPeak,
+      dominantPeak: emptyPeak as unknown as ChipPeak,
       secondaryPeaks: [],
       peakDensity: 0,
       peakQualityScore: 0,
-      priceRange: 0
+      priceRange: 0,
+      enhancedPeaks: [],
+      peakDistribution: 'scattered',
+      totalPeakVolume: 0,
+      peakVolumeRatio: 0
     };
   }
   
@@ -891,285 +1029,552 @@ export function identifyChipPeaks(chipData: ChipDistributionItem[], isSorted: bo
   const sortedData = isSorted ? chipData : [...chipData].sort((a, b) => a.price - b.price);
   const length = sortedData.length;
   
-  // 预计算总成交量（使用普通for循环提高性能）
+  // 预计算总成交量和价格统计
   let totalVolume = 0;
+  let totalWeightedVolume = 0;
+  let totalPriceSum = 0;
+  let totalWeightedPriceSum = 0;
+  
   for (let i = 0; i < length; i++) {
-    totalVolume += sortedData[i].volume;
+    const item = sortedData[i];
+    totalVolume += item.volume;
+    totalPriceSum += item.price;
+    totalWeightedVolume += item.volume * item.percentage;
+    totalWeightedPriceSum += item.price * item.volume * item.percentage;
   }
   
-  // 价格范围
+  // 价格范围和平均价格
   const minPrice = sortedData[0].price;
   const maxPrice = sortedData[length - 1].price;
   const priceRange = maxPrice - minPrice;
+  const avgPrice = totalPriceSum / length;
+  const vwap = totalWeightedVolume > 0 ? totalWeightedPriceSum / totalWeightedVolume : avgPrice;
   
   // 查找峰值
-  const peaks: ChipPeak[] = [];
+  const rawPeaks: EnhancedChipPeak[] = [];
   
-  // 优化的峰值检测算法
+  // 自适应峰值检测算法
   for (let i = 1; i < length - 1; i++) {
     const current = sortedData[i];
     const prev = sortedData[i - 1];
     const next = sortedData[i + 1];
     
-    // 峰值条件：当前成交量大于前后成交量
-    if (current.volume > prev.volume && current.volume > next.volume) {
-      // 计算峰值宽度（优化：使用二分查找或更高效的算法）
+    // 自适应阈值：根据局部成交量分布动态调整检测阈值
+    const localAvgVolume = (prev.volume + current.volume + next.volume) / 3;
+    const volumeThreshold = Math.max(localAvgVolume * 1.5, Math.max(prev.volume * 1.2, next.volume * 1.2));
+    
+    if (current.volume > volumeThreshold && current.percentage > 0.005) {
+      // 精确的峰值边界检测
       let leftIndex = i;
       let rightIndex = i;
+      let leftVolumeSum = current.volume;
+      let rightVolumeSum = current.volume;
+      let continuityScore = 1.0;
       
-      // 向左查找峰值边界
-      while (leftIndex > 0 && sortedData[leftIndex].volume > current.volume * 0.5) {
+      // 向左查找峰值边界（考虑连续性）
+      while (leftIndex > 0) {
+        const prevItem = sortedData[leftIndex - 1];
+        if (prevItem.volume < current.volume * 0.3) break;
+        
+        // 连续性评分：相邻成交量变化的平滑度
+        const volumeChange = Math.abs(prevItem.volume - sortedData[leftIndex].volume) / current.volume;
+        continuityScore *= (1 - volumeChange * 0.5);
+        
         leftIndex--;
+        leftVolumeSum += prevItem.volume;
       }
       
       // 向右查找峰值边界
-      while (rightIndex < length - 1 && sortedData[rightIndex].volume > current.volume * 0.5) {
+      while (rightIndex < length - 1) {
+        const nextItem = sortedData[rightIndex + 1];
+        if (nextItem.volume < current.volume * 0.3) break;
+        
+        // 连续性评分：相邻成交量变化的平滑度
+        const volumeChange = Math.abs(nextItem.volume - sortedData[rightIndex].volume) / current.volume;
+        continuityScore *= (1 - volumeChange * 0.5);
+        
         rightIndex++;
+        rightVolumeSum += nextItem.volume;
       }
       
+      // 计算峰值属性
       const width = sortedData[rightIndex].price - sortedData[leftIndex].price;
-      const dominance = totalVolume > 0 ? current.volume / totalVolume : 0;
-      const strength = dominance * (1 - (priceRange > 0 ? width / priceRange : 0));
+      const totalPeakVolume = leftVolumeSum + rightVolumeSum - current.volume;
+      const dominance = totalVolume > 0 ? totalPeakVolume / totalVolume : 0;
+      const percentageSum = sortedData.slice(leftIndex, rightIndex + 1)
+        .reduce((sum, item) => sum + item.percentage, 0);
       
-      // 计算更精确的可靠性指标
-      const reliability = strength * 0.8 + (width / (priceRange > 0 ? priceRange : 1)) * 0.2;
+      // 计算中心价格和成交量加权价格
+      const weightedSum = sortedData.slice(leftIndex, rightIndex + 1)
+        .reduce((sum, item) => sum + item.price * item.volume, 0);
+      const volumeWeightedPrice = totalPeakVolume > 0 ? weightedSum / totalPeakVolume : current.price;
       
-      peaks.push({
+      // 计算峰值的孤立性
+      const leftDistance = leftIndex > 0 ? sortedData[leftIndex].price - sortedData[leftIndex - 1].price : width;
+      const rightDistance = rightIndex < length - 1 ? sortedData[rightIndex + 1].price - sortedData[rightIndex].price : width;
+      const avgDistance = (leftDistance + rightDistance) / 2;
+      const isolation = Math.min(1, avgDistance / (width + 0.1));
+      
+      // 计算距离VWAP的价格距离
+      const priceDistanceToVWAP = Math.abs(current.price - vwap);
+      
+      // 与价格趋势的一致性（简单假设：价格越高，趋势向上）
+      const trendAlignment = (current.price - minPrice) / (priceRange + 0.1);
+      
+      // 成为支撑/阻力位的潜力
+      const supportResistancePotential = continuityScore * (1 - Math.abs(current.price - avgPrice) / (priceRange + 0.1));
+      
+      // 计算峰值强度（多因子综合）
+      const positionFactor = 1 - Math.abs(current.price - vwap) / (priceRange + 0.1);
+      const volumeFactor = totalPeakVolume / (totalVolume + 0.1);
+      const continuityFactor = continuityScore;
+      const isolationFactor = isolation;
+      
+      const strength = (dominance * 0.3 + percentageSum * 0.2 + positionFactor * 0.2 + volumeFactor * 0.1 + continuityFactor * 0.1 + isolationFactor * 0.1);
+      
+      // 计算可靠性指标
+      const widthFactor = Math.min(1, 1 / (width + 1));
+      const reliability = (strength * 0.5 + percentageSum * 0.2 + widthFactor * 0.1 + continuityScore * 0.1 + isolation * 0.1);
+      
+      rawPeaks.push({
         price: current.price,
         ratio: current.percentage,
-        volume: current.volume,
+        volume: totalPeakVolume,
         width,
         dominance,
         strength,
         reliability,
-        centerPrice: current.price,
-        volumeWeightedPrice: current.price
+        centerPrice: (sortedData[leftIndex].price + sortedData[rightIndex].price) / 2,
+        volumeWeightedPrice,
+        continuity: Math.max(0, continuityScore),
+        isolation,
+        priceDistanceToVWAP,
+        trendAlignment,
+        supportResistancePotential
       });
     }
   }
   
-  // 处理边界情况（优化：减少不必要的条件检查）
+  // 处理边界情况
   const firstItem = sortedData[0];
   const lastItem = sortedData[length - 1];
   
   if (length === 1) {
     // 只有一个数据点的情况
     const dominance = totalVolume > 0 ? firstItem.volume / totalVolume : 0;
-    peaks.push({
+    rawPeaks.push({
       price: firstItem.price,
       ratio: firstItem.percentage,
       volume: firstItem.volume,
       width: priceRange / 2 || 1,
       dominance,
-      strength: dominance,
+      strength: dominance * 0.8,
       reliability: dominance * 0.7,
       centerPrice: firstItem.price,
-      volumeWeightedPrice: firstItem.price
+      volumeWeightedPrice: firstItem.price,
+      continuity: 1.0,
+      isolation: 1.0,
+      priceDistanceToVWAP: Math.abs(firstItem.price - vwap),
+      trendAlignment: 0.5,
+      supportResistancePotential: 0.5
     });
   } else {
     // 处理第一个数据点
-    if (firstItem.volume > sortedData[1].volume) {
+    if (firstItem.volume > sortedData[1].volume * 1.5) {
       const dominance = totalVolume > 0 ? firstItem.volume / totalVolume : 0;
-      peaks.push({
+      rawPeaks.push({
         price: firstItem.price,
         ratio: firstItem.percentage,
         volume: firstItem.volume,
-        width: priceRange / 2 || 1,
+        width: Math.max(1, priceRange / 10),
         dominance,
-        strength: dominance,
-        reliability: dominance * 0.7,
+        strength: dominance * 0.6,
+        reliability: dominance * 0.5,
         centerPrice: firstItem.price,
-        volumeWeightedPrice: firstItem.price
+        volumeWeightedPrice: firstItem.price,
+        continuity: 0.5,
+        isolation: 0.8,
+        priceDistanceToVWAP: Math.abs(firstItem.price - vwap),
+        trendAlignment: 0.0,
+        supportResistancePotential: 0.7
       });
     }
     
     // 处理最后一个数据点
-    if (lastItem.volume > sortedData[length - 2].volume) {
+    if (lastItem.volume > sortedData[length - 2].volume * 1.5) {
       const dominance = totalVolume > 0 ? lastItem.volume / totalVolume : 0;
-      peaks.push({
+      rawPeaks.push({
         price: lastItem.price,
         ratio: lastItem.percentage,
         volume: lastItem.volume,
-        width: priceRange / 2 || 1,
+        width: Math.max(1, priceRange / 10),
         dominance,
-        strength: dominance,
-        reliability: dominance * 0.7,
+        strength: dominance * 0.6,
+        reliability: dominance * 0.5,
         centerPrice: lastItem.price,
-        volumeWeightedPrice: lastItem.price
+        volumeWeightedPrice: lastItem.price,
+        continuity: 0.5,
+        isolation: 0.8,
+        priceDistanceToVWAP: Math.abs(lastItem.price - vwap),
+        trendAlignment: 1.0,
+        supportResistancePotential: 0.7
       });
     }
   }
   
   // 按强度排序
-  peaks.sort((a, b) => b.strength - a.strength);
+  const enhancedPeaks = rawPeaks.sort((a, b) => b.strength - a.strength);
+  const peaks = enhancedPeaks as unknown as ChipPeak[];
   
   // 确定主峰和次要峰值
-  const dominantPeak = peaks.length > 0 ? peaks[0] : { price: 0, ratio: 0, volume: 0, width: 0, dominance: 0, strength: 0, reliability: 0, centerPrice: 0, volumeWeightedPrice: 0 };
+  const dominantPeak = enhancedPeaks.length > 0 ? enhancedPeaks[0] : {
+    price: 0, ratio: 0, volume: 0, width: 0, dominance: 0, strength: 0, reliability: 0, 
+    centerPrice: 0, volumeWeightedPrice: 0, continuity: 0, isolation: 0, 
+    priceDistanceToVWAP: 0, trendAlignment: 0, supportResistancePotential: 0
+  };
+  
   const isSinglePeak = dominantPeak.dominance > 0.5;
-  const peakDensity = peaks.length / (priceRange > 0 ? priceRange : 1);
-  const secondaryPeaks = peaks.length > 1 ? peaks.slice(1) : [];
+  const peakDensity = enhancedPeaks.length / (priceRange > 0 ? priceRange : 1);
+  const secondaryPeaks = enhancedPeaks.length > 1 ? 
+    enhancedPeaks.slice(1).filter(p => p.strength > dominantPeak.strength * 0.3) as unknown as ChipPeak[] : [];
   
   // 改进的峰值质量分数计算
-  const peakQualityScore = dominantPeak.strength * 0.5 + dominantPeak.reliability * 0.3 + dominantPeak.dominance * 0.2;
+  const peakQualityScore = (dominantPeak.strength * 0.3 + 
+                          dominantPeak.reliability * 0.25 + 
+                          dominantPeak.dominance * 0.2 + 
+                          dominantPeak.continuity * 0.1 + 
+                          dominantPeak.isolation * 0.1 + 
+                          (1 - dominantPeak.width / (priceRange > 0 ? priceRange : 1)) * 0.05);
+  
+  // 确定峰值分布类型
+  let peakDistribution: 'single' | 'double' | 'multiple' | 'scattered';
+  if (enhancedPeaks.length === 0) {
+    peakDistribution = 'scattered';
+  } else if (enhancedPeaks.length === 1) {
+    peakDistribution = 'single';
+  } else if (enhancedPeaks.length === 2) {
+    peakDistribution = 'double';
+  } else {
+    peakDistribution = 'multiple';
+  }
+  
+  // 计算峰值成交量统计
+  const totalPeakVolume = enhancedPeaks.reduce((sum, peak) => sum + peak.volume, 0);
+  const peakVolumeRatio = totalVolume > 0 ? totalPeakVolume / totalVolume : 0;
 
   return {
     peakPrice: dominantPeak.price,
     peakRatio: dominantPeak.ratio,
     isSinglePeak,
     peaks,
-    dominantPeak,
+    dominantPeak: dominantPeak as unknown as ChipPeak,
     secondaryPeaks,
     peakDensity,
     peakQualityScore,
-    priceRange
+    priceRange,
+    enhancedPeaks,
+    peakDistribution,
+    totalPeakVolume,
+    peakVolumeRatio
   };
 }
 
-// 计算支撑/压力位
+// 兼容旧版本的接口
+export function identifyChipPeaksLegacy(chipData: ChipDistributionItem[], isSorted: boolean = false): ChipPeakInfo {
+  const enhancedResult = identifyChipPeaks(chipData, isSorted);
+  return {
+    peakPrice: enhancedResult.peakPrice,
+    peakRatio: enhancedResult.peakRatio,
+    isSinglePeak: enhancedResult.isSinglePeak,
+    peaks: enhancedResult.peaks,
+    dominantPeak: enhancedResult.dominantPeak,
+    secondaryPeaks: enhancedResult.secondaryPeaks,
+    peakDensity: enhancedResult.peakDensity,
+    peakQualityScore: enhancedResult.peakQualityScore,
+    priceRange: enhancedResult.priceRange
+  };
+}
+
+// 增强的支撑/压力位评估
+export interface EnhancedSupportResistanceLevel extends SupportResistanceLevel {
+  priceRange: [number, number]; // 支撑/压力位的价格范围
+  volumeConcentration: number; // 成交量集中度（0-1）
+  priceDensity: number; // 价格密度（单位价格区间的筹码数量）
+  distanceFromPeak: number; // 距离最近筹码峰值的距离
+  trendContinuity: number; // 趋势连续性（0-1）
+  breakoutPotential: number; // 突破潜力（0-1）
+  historicalImportance: number; // 历史重要性（0-1）
+}
+
+export interface EnhancedSupportResistanceLevels extends SupportResistanceLevels {
+  enhancedSupportLevels: EnhancedSupportResistanceLevel[];
+  enhancedResistanceLevels: EnhancedSupportResistanceLevel[];
+  supportResistanceBalance: number; // 支撑/压力位平衡度（-1到1，负数表示支撑强于压力，正数表示压力强于支撑）
+  mostImportantSupportResistance: EnhancedSupportResistanceLevel | null;
+}
+
+// 密集区类型
+export interface DensityZone {
+  startIndex: number;
+  endIndex: number;
+  totalStrength: number;
+  totalVolume: number;
+  averagePrice: number;
+  priceRange: [number, number];
+  volumeConcentration: number;
+  priceDensity: number;
+  peakCount: number; // 包含的峰值数量
+}
+
+// 计算支撑/压力位（增强版）
 export function calculateSupportResistance(
   chipData: ChipDistributionItem[], 
   currentPrice: number, 
   isSorted: boolean = false
-): SupportResistanceLevels {
+): EnhancedSupportResistanceLevels {
   if (chipData.length === 0) {
-    return { supportLevels: [], resistanceLevels: [], strongestSupport: null, strongestResistance: null, supportResistanceRatio: 0 };
+    return {
+      supportLevels: [],
+      resistanceLevels: [],
+      strongestSupport: null,
+      strongestResistance: null,
+      supportResistanceRatio: 0,
+      enhancedSupportLevels: [],
+      enhancedResistanceLevels: [],
+      supportResistanceBalance: 0,
+      mostImportantSupportResistance: null
+    };
   }
   
   const sortedData = isSorted ? chipData : [...chipData].sort((a, b) => a.price - b.price);
   const length = sortedData.length;
   
-  // 预计算总成交量（使用普通for循环提高性能）
+  // 预计算总成交量和总百分比
   let totalVolume = 0;
-  for (let i = 0; i < length; i++) {
-    totalVolume += sortedData[i].volume;
-  }
-  
-  // 动态密度阈值计算（优化：使用更高效的平均计算）
   let totalPercentage = 0;
+  let weightedSum = 0;
+  
   for (let i = 0; i < length; i++) {
-    totalPercentage += sortedData[i].percentage;
+    const item = sortedData[i];
+    totalVolume += item.volume;
+    totalPercentage += item.percentage;
+    weightedSum += item.price * item.volume;
   }
-  const avgDensity = totalPercentage / length;
-  const densityThreshold = avgDensity * 1.5;
   
-  // 识别密集区
-  const supportLevels: SupportResistanceLevel[] = [];
-  const resistanceLevels: SupportResistanceLevel[] = [];
+  // 计算加权平均价格（用于位置评估）
+  const vwap = totalVolume > 0 ? weightedSum / totalVolume : 0;
   
-  // 优化的密集区识别算法
+  // 价格范围和平均价格
+  const minPrice = sortedData[0].price;
+  const maxPrice = sortedData[length - 1].price;
+  const priceRange = maxPrice - minPrice;
+  const avgPrice = (minPrice + maxPrice) / 2;
+  
+  // 智能密度阈值计算
+  const sortedPercentages = [...sortedData].map(d => d.percentage).sort((a, b) => b - a);
+  const top20PercentIndex = Math.max(1, Math.floor(length * 0.2));
+  const bottom20PercentIndex = Math.max(1, Math.floor(length * 0.2));
+  
+  const top20Avg = sortedPercentages.slice(0, top20PercentIndex).reduce((sum, p) => sum + p, 0) / top20PercentIndex;
+  const bottom20Avg = sortedPercentages.slice(-bottom20PercentIndex).reduce((sum, p) => sum + p, 0) / bottom20PercentIndex;
+  
+  // 动态密度阈值：考虑分布的偏度
+  const densityThreshold = bottom20Avg + (top20Avg - bottom20Avg) * 0.3;
+  
+  // 识别密集区（增强的聚类算法）
+  const zones: DensityZone[] = [];
+  let currentZone: DensityZone | null = null;
+  
   for (let i = 0; i < length; i++) {
     const item = sortedData[i];
     
-    // 只考虑超过密度阈值的区域
-    if (item.percentage < densityThreshold) continue;
-    
-    // 计算支撑/压力位强度和可靠性
-    const strength = item.percentage;
-    const reliability = totalVolume > 0 ? item.volume / totalVolume : 0;
-    const distance = currentPrice > 0 ? Math.abs((item.price - currentPrice) / currentPrice) * 100 : 0;
-    
-    // 确定支撑位或压力位
-    if (item.price < currentPrice - 0.01) { // 支撑位：价格略低于当前价格
-      supportLevels.push({
-        price: item.price,
-        strength,
-        volume: item.volume,
-        reliability,
-        width: 0, // 将在后续计算中更新
-        distance,
-        type: 'support'
-      });
-    } else if (item.price > currentPrice + 0.01) { // 压力位：价格略高于当前价格
-      resistanceLevels.push({
-        price: item.price,
-        strength,
-        volume: item.volume,
-        reliability,
-        width: 0, // 将在后续计算中更新
-        distance,
-        type: 'resistance'
-      });
-    }
-    // 忽略当前价格附近的区域
-  }
-  
-  // 优化的宽度计算
-  function calculateWidth(levels: SupportResistanceLevel[], data: ChipDistributionItem[]): void {
-    for (let i = 0; i < levels.length; i++) {
-      const level = levels[i];
-      let leftIndex = 0;
-      let rightIndex = data.length - 1;
+    if (item.percentage >= densityThreshold) {
+      if (!currentZone) {
+        // 开始新区域
+        currentZone = {
+          startIndex: i,
+          endIndex: i,
+          totalStrength: item.percentage,
+          totalVolume: item.volume,
+          averagePrice: item.price,
+          priceRange: [item.price, item.price],
+          volumeConcentration: 0,
+          priceDensity: 0,
+          peakCount: 0
+        };
+      } else {
+        // 扩展当前区域
+        currentZone.endIndex = i;
+        currentZone.totalStrength += item.percentage;
+        currentZone.totalVolume += item.volume;
+        currentZone.averagePrice = (currentZone.averagePrice * (i - currentZone.startIndex) + item.price) / (i - currentZone.startIndex + 1);
+        currentZone.priceRange[1] = item.price;
+      }
+    } else if (currentZone) {
+      // 结束当前区域并计算额外属性
+      currentZone.volumeConcentration = currentZone.totalVolume / totalVolume;
+      const zonePriceRange = currentZone.priceRange[1] - currentZone.priceRange[0] + 0.1;
+      currentZone.priceDensity = (currentZone.endIndex - currentZone.startIndex + 1) / zonePriceRange;
       
-      // 向左查找边界
-      for (let j = 0; j < data.length; j++) {
-        if (data[j].price >= level.price - avgDensity) {
-          leftIndex = j;
-          break;
+      // 计算区域内的峰值数量
+      let peakCount = 0;
+      for (let j = Math.max(currentZone.startIndex + 1, 1); j < Math.min(currentZone.endIndex, length - 1); j++) {
+        const prev = sortedData[j - 1];
+        const curr = sortedData[j];
+        const next = sortedData[j + 1];
+        if (curr.percentage > prev.percentage && curr.percentage > next.percentage) {
+          peakCount++;
         }
       }
+      currentZone.peakCount = peakCount;
       
-      // 向右查找边界
-      for (let j = data.length - 1; j >= 0; j--) {
-        if (data[j].price <= level.price + avgDensity) {
-          rightIndex = j;
-          break;
-        }
-      }
-      
-      level.width = data[rightIndex].price - data[leftIndex].price;
+      zones.push(currentZone);
+      currentZone = null;
     }
   }
   
-  // 计算支撑位和压力位的宽度
-  calculateWidth(supportLevels, sortedData);
-  calculateWidth(resistanceLevels, sortedData);
+  // 处理最后一个区域
+  if (currentZone) {
+    currentZone.volumeConcentration = currentZone.totalVolume / totalVolume;
+    const zonePriceRange = currentZone.priceRange[1] - currentZone.priceRange[0] + 0.1;
+    currentZone.priceDensity = (currentZone.endIndex - currentZone.startIndex + 1) / zonePriceRange;
+    zones.push(currentZone);
+  }
   
-  // 排序：支撑位从高到低，压力位从低到高
-  supportLevels.sort((a, b) => b.price - a.price);
-  resistanceLevels.sort((a, b) => a.price - b.price);
+  // 计算每个密集区到当前价格的距离
+  const supportZones = zones.filter(zone => zone.averagePrice < currentPrice);
+  const resistanceZones = zones.filter(zone => zone.averagePrice > currentPrice);
   
-  // 找到最强支撑和压力位（优化：使用更高效的查找方法）
+  // 从区域创建增强的支撑/压力位
+  const createEnhancedLevel = (zone: DensityZone, type: 'support' | 'resistance'): EnhancedSupportResistanceLevel => {
+    const zoneData = sortedData.slice(zone.startIndex, zone.endIndex + 1);
+    const centerPrice = zone.averagePrice;
+    const width = zone.priceRange[1] - zone.priceRange[0];
+    const distance = currentPrice > 0 ? Math.abs((centerPrice - currentPrice) / currentPrice) * 100 : 0;
+    
+    // 计算强度因子
+    const strengthFactor = zone.totalStrength / (zoneData.length * sortedData.reduce((sum, item) => sum + item.percentage, 0));
+    const volumeFactor = zone.totalVolume / totalVolume;
+    const positionFactor = 1 - Math.abs(centerPrice - vwap) / (priceRange + 0.1);
+    const densityFactor = zone.priceDensity / (sortedData.length / (priceRange + 0.1));
+    
+    // 计算强度和可靠性
+    const strength = (strengthFactor * 0.3 + volumeFactor * 0.25 + positionFactor * 0.2 + densityFactor * 0.15 + (zone.peakCount > 0 ? 0.1 : 0));
+    const reliability = (volumeFactor * 0.4 + strengthFactor * 0.3 + densityFactor * 0.2 + (zone.peakCount > 0 ? 0.1 : 0));
+    
+    // 计算距离最近筹码峰值的距离（简化计算）
+    const distanceFromPeak = Math.abs(centerPrice - avgPrice);
+    
+    // 趋势连续性（简单假设：价格越接近当前价格，趋势连续性越高）
+    const trendContinuity = 1 - (distance / 100);
+    
+    // 突破潜力
+    const breakoutPotential = (1 - reliability) * (1 - strength) * 0.5;
+    
+    // 历史重要性（基于成交量和强度）
+    const historicalImportance = strength * reliability;
+    
+    return {
+      price: centerPrice,
+      strength,
+      volume: zone.totalVolume,
+      reliability,
+      width,
+      distance,
+      type,
+      priceRange: zone.priceRange,
+      volumeConcentration: zone.volumeConcentration,
+      priceDensity: zone.priceDensity,
+      distanceFromPeak,
+      trendContinuity,
+      breakoutPotential,
+      historicalImportance
+    };
+  };
+  
+  const enhancedSupportLevels = supportZones.map(zone => createEnhancedLevel(zone, 'support'));
+  const enhancedResistanceLevels = resistanceZones.map(zone => createEnhancedLevel(zone, 'resistance'));
+  
+  // 转换为标准格式
+  const supportLevels = enhancedSupportLevels as unknown as SupportResistanceLevel[];
+  const resistanceLevels = enhancedResistanceLevels as unknown as SupportResistanceLevel[];
+  
+  // 智能排序和过滤
+  enhancedSupportLevels.sort((a, b) => {
+    // 优先考虑距离当前价格较近的支撑位
+    if (Math.abs(a.distance - b.distance) < 5) {
+      return b.strength - a.strength; // 距离相近时，按强度排序
+    }
+    return a.distance - b.distance;
+  }).filter((_, index) => index < 5); // 只保留前5个最强支撑位
+  
+  enhancedResistanceLevels.sort((a, b) => {
+    // 优先考虑距离当前价格较近的压力位
+    if (Math.abs(a.distance - b.distance) < 5) {
+      return b.strength - a.strength; // 距离相近时，按强度排序
+    }
+    return a.distance - b.distance;
+  }).filter((_, index) => index < 5); // 只保留前5个最强压力位
+  
+  // 找到最强支撑和压力位
   let strongestSupport: SupportResistanceLevel | null = null;
   let strongestResistance: SupportResistanceLevel | null = null;
   
-  if (supportLevels.length > 0) {
-    strongestSupport = supportLevels[0];
-    for (let i = 1; i < supportLevels.length; i++) {
-      if (supportLevels[i].strength > strongestSupport.strength) {
-        strongestSupport = supportLevels[i];
-      }
-    }
+  if (enhancedSupportLevels.length > 0) {
+    strongestSupport = enhancedSupportLevels.reduce((best, current) => 
+      current.strength > best.strength ? current : best, enhancedSupportLevels[0]);
   }
   
-  if (resistanceLevels.length > 0) {
-    strongestResistance = resistanceLevels[0];
-    for (let i = 1; i < resistanceLevels.length; i++) {
-      if (resistanceLevels[i].strength > strongestResistance.strength) {
-        strongestResistance = resistanceLevels[i];
-      }
-    }
+  if (enhancedResistanceLevels.length > 0) {
+    strongestResistance = enhancedResistanceLevels.reduce((best, current) => 
+      current.strength > best.strength ? current : best, enhancedResistanceLevels[0]);
   }
   
   // 计算支撑压力比
-  let totalSupportStrength = 0;
-  for (const level of supportLevels) {
-    totalSupportStrength += level.strength;
-  }
-  
-  let totalResistanceStrength = 0;
-  for (const level of resistanceLevels) {
-    totalResistanceStrength += level.strength;
-  }
+  const totalSupportStrength = enhancedSupportLevels.reduce((sum, level) => sum + level.strength * (1 / (level.distance + 1)), 0);
+  const totalResistanceStrength = enhancedResistanceLevels.reduce((sum, level) => sum + level.strength * (1 / (level.distance + 1)), 0);
   
   const supportResistanceRatio = totalResistanceStrength > 0 
     ? totalSupportStrength / totalResistanceStrength 
     : totalSupportStrength > 0 ? 10 : 1;
+  
+  // 计算支撑/压力位平衡度
+  const supportResistanceBalance = (totalResistanceStrength - totalSupportStrength) / (totalResistanceStrength + totalSupportStrength + 0.1);
+  
+  // 找到最重要的支撑/压力位
+  let mostImportantSupportResistance: EnhancedSupportResistanceLevel | null = null;
+  
+  if (enhancedSupportLevels.length > 0 || enhancedResistanceLevels.length > 0) {
+    const allLevels = [...enhancedSupportLevels, ...enhancedResistanceLevels];
+    mostImportantSupportResistance = allLevels.reduce((best, current) => 
+      !best || current.strength > best.strength ? current : best, allLevels[0]);
+  }
   
   return {
     supportLevels,
     resistanceLevels,
     strongestSupport,
     strongestResistance,
-    supportResistanceRatio
+    supportResistanceRatio,
+    enhancedSupportLevels,
+    enhancedResistanceLevels,
+    supportResistanceBalance,
+    mostImportantSupportResistance
+  };
+}
+
+// 兼容旧版本的接口
+export function calculateSupportResistanceLegacy(
+  chipData: ChipDistributionItem[], 
+  currentPrice: number, 
+  isSorted: boolean = false
+): SupportResistanceLevels {
+  const enhancedResult = calculateSupportResistance(chipData, currentPrice, isSorted);
+  return {
+    supportLevels: enhancedResult.supportLevels,
+    resistanceLevels: enhancedResult.resistanceLevels,
+    strongestSupport: enhancedResult.strongestSupport,
+    strongestResistance: enhancedResult.strongestResistance,
+    supportResistanceRatio: enhancedResult.supportResistanceRatio
   };
 }

@@ -1,7 +1,7 @@
 // 舆情汇总API
 import { apiGet, MockDataGenerator } from '../common/fetch';
 import { ApiResponse } from '../common/response';
-import { stockCodeFormatError } from '../common/errors';
+import { ApiError, stockCodeFormatError } from '../common/errors';
 import { newsAggregator } from './aggregator';
 import { formatDateTime, isValidStockCode } from '../common/utils'; // 导入通用工具函数
 
@@ -162,56 +162,35 @@ export async function fetchOpinionSummary(
   params: OpinionSummaryParams
 ): Promise<ApiResponse<OpinionSummaryData>> {
   const { stockCode, timeRange = '7d' } = params;
-  let dataSource = 'Mock'; // 默认数据源
+  let dataSource = 'Local-API'; // 默认数据源
   
   try {
-    // 1. 首先检查是否处于Mock模式
-    if (process.env.NEXT_PUBLIC_API_MOCK === 'true') {
-      console.info('Mock mode enabled, using mock data directly');
-      dataSource = 'Mock';
-      const mockResponse = await apiGet<OpinionSummaryData>(
-        '/public-opinion/summary',
-        params,
-        { requiresAuth: false },
-        generateOpinionSummaryMock
-      );
-      
-      // 增强Mock响应，添加数据源标识
+    // 1. 尝试调用本地后端API
+    console.info('Trying to fetch from local backend API');
+    const response = await apiGet<OpinionSummaryData>(
+      '/public-opinion/summary',
+      params,
+      { requiresAuth: false }
+    );
+    
+    if (response.code === 200) {
+      dataSource = 'Local-API';
+      // 增强响应，添加数据源标识
       return {
-        ...mockResponse,
+        ...response,
         data: {
-          ...mockResponse.data,
+          ...response.data,
           _dataSource: dataSource
         }
       };
     }
-    
-    // 2. 尝试调用本地后端API
-    try {
-      console.info('Trying to fetch from local backend API');
-      const response = await apiGet<OpinionSummaryData>(
-        '/public-opinion/summary',
-        params,
-        { requiresAuth: false }
-      );
-      
-      if (response.code === 200) {
-        dataSource = 'Local-API';
-        // 增强响应，添加数据源标识
-        return {
-          ...response,
-          data: {
-            ...response.data,
-            _dataSource: dataSource
-          }
-        };
-      }
-    } catch (localApiError) {
-      console.warn('Local backend API failed, falling back to NewsAggregator:', localApiError);
-      // 继续尝试下一级兜底
-    }
-    
-    // 3. 使用NewsAggregator生成舆情摘要
+  } catch (localApiError) {
+    console.warn('Local backend API failed, falling back to NewsAggregator:', localApiError);
+    // 继续尝试下一级兜底
+  }
+  
+  // 2. 使用NewsAggregator生成舆情摘要
+  try {
     console.info('Using NewsAggregator to generate opinion summary');
     const summaryData = await newsAggregator.generateOpinionSummary(stockCode, timeRange);
     dataSource = 'NewsAggregator';
@@ -228,25 +207,7 @@ export async function fetchOpinionSummary(
       timestamp: Date.now()
     };
   } catch (error) {
-    console.error('All data sources failed, falling back to mock:', error);
-    // 所有数据源都失败，最终回退到模拟数据
+    console.error('All real data sources failed:', error);
+    throw new ApiError(500, 'Failed to fetch opinion summary from real sources');
   }
-  
-  // 4. 最终回退到模拟数据
-  console.info('All data sources failed, using mock data');
-  const mockResponse = await apiGet<OpinionSummaryData>(
-    '/public-opinion/summary',
-    params,
-    { requiresAuth: false },
-    generateOpinionSummaryMock
-  );
-  
-  // 增强Mock响应，添加数据源标识
-  return {
-    ...mockResponse,
-    data: {
-      ...mockResponse.data,
-      _dataSource: 'Mock'
-    }
-  };
 }

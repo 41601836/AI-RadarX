@@ -147,7 +147,7 @@ describe('Technical Indicators Tests', () => {
   });
   
   test('calculateRSI should return correct RSI values', () => {
-    const rsi = calculateRSI({ close: testClosePrices, period: 5 });
+    const rsi = calculateRSI({ data: testClosePrices, period: 5 });
     
     expect(rsi.length).toBe(testClosePrices.length);
     
@@ -159,7 +159,7 @@ describe('Technical Indicators Tests', () => {
   });
   
   test('calculateBollingerBands should return correct bands', () => {
-    const bands = calculateBollingerBands({ close: testClosePrices, period: 5 });
+    const bands = calculateBollingerBands({ data: testClosePrices, period: 5, stdDev: 2 });
     
     expect(bands.middle.length).toBe(testClosePrices.length);
     expect(bands.upper.length).toBe(testClosePrices.length);

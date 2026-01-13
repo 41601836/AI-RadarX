@@ -140,13 +140,13 @@ if (assert(macd.diff.length === testClosePrices.length, 'calculateMACD 返回正
 }
 
 totalTests++;
-const rsi = calculateRSI({ close: testClosePrices, period: 5 });
+const rsi = calculateRSI({ data: testClosePrices, period: 5 });
 if (assert(rsi.length === testClosePrices.length && rsi.every(v => v >= 0 && v <= 100), 'calculateRSI 返回有效的RSI值')) {
   passedTests++;
 }
 
 totalTests++;
-const bands = calculateBollingerBands({ close: testClosePrices, period: 5 });
+const bands = calculateBollingerBands({ data: testClosePrices, period: 5, stdDev: 2 });
 if (assert(bands.middle.length === testClosePrices.length && bands.upper.length === testClosePrices.length, 'calculateBollingerBands 返回正确结构')) {
   passedTests++;
 }

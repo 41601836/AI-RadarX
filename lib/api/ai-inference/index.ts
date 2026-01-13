@@ -5,6 +5,7 @@ import { getTushareDailyData } from '../common/tushare';
 import { fetchChipDistribution } from '../chip/distribution';
 import { fetchOpinionSummary } from '../publicOpinion/summary';
 import { fetchHeatFlowStockSeat } from '../heatFlow/stockSeat';
+import { defaultAIClient } from './ai-client';
 
 // 缓存管理
 interface AIAnalysisCache {
@@ -148,52 +149,66 @@ export async function getAISmartAnalysis(stockCode: string): Promise<AIAnalysisR
 }
 
 /**
- * 调用大模型接口（预留实现位置）
+ * 调用大模型接口（支持真实推理或模拟推理）
  * @param data 聚合的股票数据
  * @returns AI分析结果
  */
 async function callAIModel(data: AggregatedStockData): Promise<AIAnalysisResult> {
-  // TODO: 集成真实的大模型接口（DeepSeek/GPT等）
-  // 使用静态Mock数据，减少计算开销
-  
-  // 计算平均成本线（简化计算）
-  const averageCostLine = (data.chipData.supportPrice + data.chipData.resistancePrice) / 2;
-  
-  // 简化的操作评级决策
-  let operationRating: 'buy' | 'hold' | 'sell' = 'hold';
-  let confidenceScore = 70;
-  
-  // 基于简单条件的决策
-  if (data.sentimentData.opinionScore > 75 && data.heatFlowData.hotMoneyNetBuy > 0) {
-    operationRating = 'buy';
-    confidenceScore = 85;
-  } else if (data.heatFlowData.hotMoneyNetBuy < -5000000) {
-    operationRating = 'sell';
-    confidenceScore = 80;
+  try {
+    // 生成AI提示词
+    const prompt = defaultAIClient.generatePromptFromStockData(data);
+    
+    // 调用AI推理接口（根据环境变量自动切换真实或模拟）
+    const aiResponse = await defaultAIClient.inferWithLLM({
+      prompt,
+      temperature: 0.1,
+      maxTokens: 1000
+    });
+    
+    // 解析AI响应为结构化结果
+    return defaultAIClient.parseAIResponse(aiResponse.content);
+  } catch (error) {
+    console.error('AI模型调用失败，使用备用分析逻辑:', error);
+    
+    // 计算平均成本线（简化计算）
+    const averageCostLine = (data.chipData.supportPrice + data.chipData.resistancePrice) / 2;
+    
+    // 简化的操作评级决策
+    let operationRating: 'buy' | 'hold' | 'sell' = 'hold';
+    let confidenceScore = 70;
+    
+    // 基于简单条件的决策
+    if (data.sentimentData.opinionScore > 75 && data.heatFlowData.hotMoneyNetBuy > 0) {
+      operationRating = 'buy';
+      confidenceScore = 85;
+    } else if (data.heatFlowData.hotMoneyNetBuy < -5000000) {
+      operationRating = 'sell';
+      confidenceScore = 80;
+    }
+    
+    // 市场情绪分析
+    const marketSentiment = data.marketSentiment;
+    const marketSentimentAnalysis = {
+      'ice': '全市场情绪处于冰点，风险较大。',
+      'cold': '全市场情绪偏冷，谨慎操作。',
+      'hot': '全市场情绪火热，机会较多。',
+      'boiling': '全市场情绪沸腾，风险累积。',
+      'neutral': '全市场情绪中性，均衡配置。'
+    }[marketSentiment.sentimentLevel];
+    
+    // 生成静态的分析结果（备用逻辑）
+    return {
+      trendAnalysis: `${data.stockName}(${data.stockCode})当前市场情绪${marketSentimentAnalysis}`,
+      mainIntention: '主力资金活跃度适中，股价在合理区间内运行。',
+      operationRating,
+      confidenceScore,
+      riskWarning: [
+        `【市场情绪分析】${marketSentimentAnalysis}`,
+        '【操作建议】根据个人风险偏好制定交易策略',
+        `【参考价格】平均成本线(${averageCostLine.toFixed(0)}分)`
+      ]
+    };
   }
-  
-  // 市场情绪分析
-  const marketSentiment = data.marketSentiment;
-  const marketSentimentAnalysis = {
-    'ice': '全市场情绪处于冰点，风险较大。',
-    'cold': '全市场情绪偏冷，谨慎操作。',
-    'hot': '全市场情绪火热，机会较多。',
-    'boiling': '全市场情绪沸腾，风险累积。',
-    'neutral': '全市场情绪中性，均衡配置。'
-  }[marketSentiment.sentimentLevel];
-  
-  // 生成静态的分析结果
-  return {
-    trendAnalysis: `${data.stockName}(${data.stockCode})当前市场情绪${marketSentimentAnalysis}`,
-    mainIntention: '主力资金活跃度适中，股价在合理区间内运行。',
-    operationRating,
-    confidenceScore,
-    riskWarning: [
-      `【市场情绪分析】${marketSentimentAnalysis}`,
-      '【操作建议】根据个人风险偏好制定交易策略',
-      `【参考价格】平均成本线(${averageCostLine.toFixed(0)}分)`
-    ]
-  };
 }
 
 /**

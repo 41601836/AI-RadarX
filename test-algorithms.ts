@@ -195,18 +195,19 @@ function testTechnicalIndicators() {
   
   // 测试MACD
   console.log('\n1. MACD指标:');
+
   const macdStartTime = performance.now();
-  const macdResult = calculateMACD({ close: closePrices, fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 });
+  const macdResult = calculateMACD({ data: closePrices, fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 });
   const macdEndTime = performance.now();
   console.log(`处理时间: ${(macdEndTime - macdStartTime).toFixed(2)}ms`);
-  console.log(`最新DIF: ${macdResult.diff[macdResult.diff.length - 1].toFixed(4)}`);
-  console.log(`最新DEA: ${macdResult.dea[macdResult.dea.length - 1].toFixed(4)}`);
-  console.log(`最新MACD柱状图: ${macdResult.bar[macdResult.bar.length - 1].toFixed(4)}`);
+  console.log(`最新MACD: ${macdResult.macd[macdResult.macd.length - 1].toFixed(4)}`);
+  console.log(`最新信号: ${macdResult.signal[macdResult.signal.length - 1].toFixed(4)}`);
+  console.log(`最新柱状图: ${macdResult.histogram[macdResult.histogram.length - 1].toFixed(4)}`);
   
   // 测试RSI
   console.log('\n2. RSI指标:');
   const rsiStartTime = performance.now();
-  const rsiResult = calculateRSI({ close: closePrices, period: 14 });
+  const rsiResult = calculateRSI({ data: closePrices, period: 14 });
   const rsiEndTime = performance.now();
   console.log(`处理时间: ${(rsiEndTime - rsiStartTime).toFixed(2)}ms`);
   console.log(`最新RSI值: ${rsiResult[rsiResult.length - 1].toFixed(2)}`);
@@ -270,7 +271,7 @@ function testKlinePatternRecognition() {
   if (patterns.length > 0) {
     console.log('\n主要形态:');
     patterns.slice(0, 3).forEach((pattern, index) => {
-      console.log(`${index + 1}. ${pattern.pattern} (置信度: ${(pattern.confidence * 100).toFixed(2)}%)`);
+      console.log(`${index + 1}. ${pattern.name} (置信度: ${(pattern.confidence * 100).toFixed(2)}%)`);
       console.log(`   类型: ${pattern.patternType}, 家族: ${pattern.patternFamily}`);
       console.log(`   时间范围: 索引${pattern.startIndex}-${pattern.endIndex}`);
     });
@@ -288,8 +289,8 @@ function testDTWSequenceMatching() {
   const sequence2 = Array.from({ length: 120 }, () => Math.random() * 100);
   
   const params: DTWAdvancedParams = {
-    sequence1,
-    sequence2,
+    series1: sequence1,
+    series2: sequence2,
     windowSize: 20,
     normalization: 'zscore',
     distanceMetric: 'euclidean',
@@ -305,8 +306,8 @@ function testDTWSequenceMatching() {
   
   // 测试不同参数组合
   const params2: DTWAdvancedParams = {
-    sequence1,
-    sequence2,
+    series1: sequence1,
+    series2: sequence2,
     windowSize: 10,
     normalization: 'minmax',
     distanceMetric: 'manhattan',

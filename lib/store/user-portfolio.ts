@@ -8,6 +8,7 @@ export interface PortfolioPosition {
   stockCode: string;
   stockName: string;
   shares: number;
+  availableShares: number;
   averagePrice: number;
   currentPrice: number;
   marketValue: number;
@@ -102,6 +103,15 @@ function calculatePortfolioStats(positions: PortfolioPosition[]): {
   totalProfitLossRate: number;
 } {
   // 使用静态计算，避免不必要的实时计算
+  // 安全处理：确保positions是有效的数组
+  if (!Array.isArray(positions)) {
+    return {
+      totalMarketValue: 0,
+      totalProfitLoss: 0,
+      totalProfitLossRate: 0
+    };
+  }
+  
   const totalMarketValue = positions.reduce((sum, pos) => sum + pos.marketValue, 0);
   const totalCost = positions.reduce((sum, pos) => sum + pos.shares * pos.averagePrice, 0);
   const totalProfitLoss = totalMarketValue - totalCost;
@@ -259,7 +269,9 @@ export const useUserStore = create<UserPortfolioState>()(
       
       // 持仓操作
       addPosition: (position) => set((state) => {
-        const newPositions = [...state.positions, position];
+        // 安全处理：确保positions是有效的数组
+        const currentPositions = Array.isArray(state.positions) ? state.positions : [];
+        const newPositions = [...currentPositions, position];
         const { totalMarketValue, totalProfitLoss, totalProfitLossRate } = calculatePortfolioStats(newPositions);
         
         return {
@@ -272,7 +284,9 @@ export const useUserStore = create<UserPortfolioState>()(
       }),
       
       updatePosition: (stockCode, updates) => set((state) => {
-        const newPositions = state.positions.map(pos => 
+        // 安全处理：确保positions是有效的数组
+        const currentPositions = Array.isArray(state.positions) ? state.positions : [];
+        const newPositions = currentPositions.map(pos => 
           pos.stockCode === stockCode ? { ...pos, ...updates } : pos
         );
         const { totalMarketValue, totalProfitLoss, totalProfitLossRate } = calculatePortfolioStats(newPositions);
@@ -287,7 +301,9 @@ export const useUserStore = create<UserPortfolioState>()(
       }),
       
       removePosition: (stockCode) => set((state) => {
-        const newPositions = state.positions.filter(pos => pos.stockCode !== stockCode);
+        // 安全处理：确保positions是有效的数组
+        const currentPositions = Array.isArray(state.positions) ? state.positions : [];
+        const newPositions = currentPositions.filter(pos => pos.stockCode !== stockCode);
         const { totalMarketValue, totalProfitLoss, totalProfitLossRate } = calculatePortfolioStats(newPositions);
         
         return {
@@ -319,24 +335,33 @@ export const useUserStore = create<UserPortfolioState>()(
       
       // 自选股操作
       addToWatchlist: (stockCode, stockName) => set((state) => {
+        // 安全处理：确保watchlist是有效的数组
+        const currentWatchlist = Array.isArray(state.watchlist) ? state.watchlist : [];
+        
         // 检查是否已存在
-        if (!state.watchlist.some(item => item.stockCode === stockCode)) {
-          return {
-            ...state,
-            watchlist: [...state.watchlist, {
-              stockCode,
-              stockName,
-              addTime: Date.now()
-            }]
-          };
+        if (currentWatchlist.some(item => item.stockCode === stockCode)) {
+          return state;
         }
-        return state;
+        
+        return {
+          ...state,
+          watchlist: [...currentWatchlist, {
+            stockCode,
+            stockName,
+            addTime: Date.now()
+          }]
+        };
       }),
       
-      removeFromWatchlist: (stockCode) => set((state) => ({
-        ...state,
-        watchlist: state.watchlist.filter(item => item.stockCode !== stockCode)
-      })),
+      removeFromWatchlist: (stockCode) => set((state) => {
+        // 安全处理：确保watchlist是有效的数组
+        const currentWatchlist = Array.isArray(state.watchlist) ? state.watchlist : [];
+        
+        return {
+          ...state,
+          watchlist: currentWatchlist.filter(item => item.stockCode !== stockCode)
+        };
+      }),
       
       clearWatchlist: () => set((state) => ({
         ...state,

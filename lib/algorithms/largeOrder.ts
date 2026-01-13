@@ -134,12 +134,38 @@ export function calculateEnhancedDynamicThreshold(orders: OrderItem[], n: number
   };
 }
 
+// 计算市场波动率（基于价格变化的标准差）
+function calculateMarketVolatility(orders: OrderItem[]): number {
+  if (orders.length < 2) return 0;
+  
+  // 计算价格变化率
+  const priceChanges: number[] = [];
+  for (let i = 1; i < orders.length; i++) {
+    const prevPrice = orders[i - 1].tradePrice;
+    const currPrice = orders[i].tradePrice;
+    if (prevPrice > 0) {
+      const changeRate = Math.abs(currPrice - prevPrice) / prevPrice;
+      priceChanges.push(changeRate);
+    }
+  }
+  
+  if (priceChanges.length === 0) return 0;
+  
+  // 计算价格变化率的标准差作为波动率
+  const avgChange = priceChanges.reduce((sum, change) => sum + change, 0) / priceChanges.length;
+  const variance = priceChanges.reduce((sum, change) => sum + Math.pow(change - avgChange, 2), 0) / priceChanges.length;
+  return Math.sqrt(variance);
+}
+
 // 计算动态阈值（高效版，适用于实时流处理）
 export function calculateEfficientDynamicThreshold(
   orders: OrderItem[], 
   n: number = 2,
-  useRobustStats: boolean = false, // 是否使用鲁棒统计（基于中位数）
-  timeWindow: number = 60000 // 60秒时间窗口
+  useRobustStats: boolean = true, // 默认使用鲁棒统计
+  timeWindow: number = 60000, // 60秒时间窗口
+  useVolumeWeight: boolean = true, // 是否根据成交量加权
+  adaptiveN: boolean = true, // 是否自适应调整标准差倍数
+  useVolatilityAdjustment: boolean = true // 是否使用波动率调整
 ): DynamicThreshold {
   if (orders.length === 0) {
     return { 
@@ -153,54 +179,122 @@ export function calculateEfficientDynamicThreshold(
     };
   }
   
-  // 使用滑动窗口或最近订单计算阈值，提高实时性
-  const recentOrders = orders.length > 1000 ? orders.slice(-1000) : orders;
+  // 智能选择最近订单数量，根据订单频率动态调整
+  const recentOrderCount = Math.max(100, Math.min(1000, orders.length * 0.3));
+  const recentOrders = orders.slice(-recentOrderCount);
   const orderCount = recentOrders.length;
   
+  // 计算市场波动率
+  const marketVolatility = useVolatilityAdjustment ? calculateMarketVolatility(recentOrders) : 0;
+  
+  // 根据市场活跃度和波动率动态调整n值
+  let adjustedN = n;
+  if (adaptiveN) {
+    const orderFrequency = orderCount / (timeWindow / 1000); // 每秒订单数
+    // 市场越活跃，n值适当降低以捕捉更多异常
+    adjustedN = Math.max(1.5, Math.min(3.0, n * (1 - (orderFrequency - 10) * 0.01)));
+    
+    // 基于波动率进一步调整：波动率越高，n值适当降低以适应市场变化
+    if (useVolatilityAdjustment && marketVolatility > 0) {
+      // 波动率通常在0-0.1之间，转换为0.1-0.3的调整因子
+      const volatilityAdjustment = Math.min(0.3, marketVolatility * 3);
+      adjustedN = Math.max(1.2, adjustedN * (1 - volatilityAdjustment));
+    }
+  }
+  
+  // 使用成交量加权的统计计算
+  let weights: number[] = [];
+  if (useVolumeWeight) {
+    const totalVolume = recentOrders.reduce((sum, order) => sum + order.tradeVolume, 0);
+    weights = recentOrders.map(order => totalVolume > 0 ? order.tradeVolume / totalVolume : 1);
+  } else {
+    weights = Array(orderCount).fill(1);
+  }
+  
   if (useRobustStats) {
-    // 基于中位数的鲁棒阈值计算
+    // 基于中位数的鲁棒阈值计算，添加成交量加权
     const amounts = recentOrders.map(order => order.tradeAmount);
     const sortedAmounts = [...amounts].sort((a, b) => a - b);
-    const median = calculateMedian(amounts);
     
-    // 计算中位数绝对偏差（MAD）作为鲁棒性标准差估计
-    const mad = calculateMedian(amounts.map(amount => Math.abs(amount - median)));
+    // 计算加权中位数
+    let cumulativeWeight = 0;
+    let weightedMedian = sortedAmounts[0];
+    const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+    const medianWeight = totalWeight / 2;
+    
+    for (let i = 0; i < sortedAmounts.length; i++) {
+      cumulativeWeight += weights[i];
+      if (cumulativeWeight >= medianWeight) {
+        weightedMedian = sortedAmounts[i];
+        break;
+      }
+    }
+    
+    // 计算加权中位数绝对偏差（MAD）作为鲁棒性标准差估计
+    const absoluteDeviations = amounts.map(amount => Math.abs(amount - weightedMedian));
+    const sortedDeviations = [...absoluteDeviations].sort((a, b) => a - b);
+    
+    // 计算偏差的中位数
+    cumulativeWeight = 0;
+    let mad = sortedDeviations[0];
+    for (let i = 0; i < sortedDeviations.length; i++) {
+      cumulativeWeight += weights[i];
+      if (cumulativeWeight >= medianWeight) {
+        mad = sortedDeviations[i];
+        break;
+      }
+    }
+    
     const robustStd = mad * 1.4826; // 转换为标准差估计
     
-    const threshold = median + n * robustStd;
-    const upperThreshold = median + 3 * robustStd;
+    const threshold = weightedMedian + adjustedN * robustStd;
+    const upperThreshold = weightedMedian + 3 * robustStd;
     
     return {
-      mean: median, // 使用中位数作为中心趋势估计
+      mean: weightedMedian, // 使用加权中位数作为中心趋势估计
       std: robustStd,
       threshold,
-      n,
+      n: adjustedN,
       upperThreshold,
       timeWindow,
       orderCount
     };
   } else {
-    // 快速计算均值和标准差
+    // 快速计算加权均值和标准差
     let sum = 0;
     let sumSquared = 0;
-    for (const order of recentOrders) {
-      sum += order.tradeAmount;
-      sumSquared += order.tradeAmount * order.tradeAmount;
+    let totalWeight = 0;
+    
+    for (let i = 0; i < recentOrders.length; i++) {
+      const order = recentOrders[i];
+      const weight = weights[i];
+      sum += order.tradeAmount * weight;
+      sumSquared += order.tradeAmount * order.tradeAmount * weight;
+      totalWeight += weight;
     }
     
-    const count = recentOrders.length;
-    const mean = sum / count;
-    const variance = (sumSquared / count) - (mean * mean);
+    const mean = sum / totalWeight;
+    const variance = (sumSquared / totalWeight) - (mean * mean);
     const std = Math.sqrt(Math.max(0, variance)); // 确保方差非负
     
-    const threshold = mean + n * std;
-    const upperThreshold = mean + 3 * std;
+    // 添加异常值检测和处理
+    const isOutlier = (amount: number) => Math.abs(amount - mean) > 3 * std;
+    const outlierCount = recentOrders.filter(order => isOutlier(order.tradeAmount)).length;
+    
+    // 如果异常值比例过高，调整标准差
+    let adjustedStd = std;
+    if (outlierCount / orderCount > 0.1) {
+      adjustedStd = std * 0.8; // 降低标准差以减少误报
+    }
+    
+    const threshold = mean + adjustedN * adjustedStd;
+    const upperThreshold = mean + 3 * adjustedStd;
     
     return {
       mean,
-      std,
+      std: adjustedStd,
       threshold,
-      n,
+      n: adjustedN,
       upperThreshold,
       timeWindow,
       orderCount
@@ -217,44 +311,235 @@ export interface LargeOrderResult {
   amountRatio: number; // 相对于均值的比例
   thresholdRatio: number; // 相对于阈值的比例
   sizeLevel: 'small' | 'medium' | 'large' | 'extra' | 'huge'; // 订单大小等级
+  importanceScore?: number; // 订单重要性评分
+  positionFactor?: number; // 价格位置因子
+  trendFactor?: number; // 市场趋势因子
+  volumeFactor?: number; // 成交量因子
+  combinedFactor?: number; // 综合加权因子
   timestamp: number; // 处理时间戳（毫秒）
 }
 
-// 识别单个特大单（高效版）
+// 计算价格位置与支撑/压力位的距离因子
+function calculatePositionFactor(
+  orderPrice: number, 
+  currentPrice: number, 
+  priceLevel?: 'support' | 'resistance' | 'middle',
+  supportLevels?: Array<{ price: number; strength: number }>,
+  resistanceLevels?: Array<{ price: number; strength: number }>
+): number {
+  let factor = 1.0;
+  
+  if (!priceLevel) return factor;
+  
+  // 基础位置因子
+  if (priceLevel === 'support' || priceLevel === 'resistance') {
+    factor = 1.3;
+  }
+  
+  // 更精细的支撑/压力位距离计算
+  if (priceLevel === 'support' && supportLevels && supportLevels.length > 0) {
+    // 找到最近的支撑位
+    const nearestSupport = supportLevels.reduce((nearest, current) => {
+      const currentDist = Math.abs(orderPrice - current.price);
+      const nearestDist = Math.abs(orderPrice - nearest.price);
+      return currentDist < nearestDist ? current : nearest;
+    });
+    
+    // 距离支撑位越近，因子越大
+    const distRatio = Math.abs(orderPrice - nearestSupport.price) / currentPrice;
+    if (distRatio < 0.01) { // 1%以内
+      factor *= (1 + nearestSupport.strength * 0.5);
+    } else if (distRatio < 0.03) { // 3%以内
+      factor *= (1 + nearestSupport.strength * 0.3);
+    }
+  }
+  
+  if (priceLevel === 'resistance' && resistanceLevels && resistanceLevels.length > 0) {
+    // 找到最近的压力位
+    const nearestResistance = resistanceLevels.reduce((nearest, current) => {
+      const currentDist = Math.abs(orderPrice - current.price);
+      const nearestDist = Math.abs(orderPrice - nearest.price);
+      return currentDist < nearestDist ? current : nearest;
+    });
+    
+    // 距离压力位越近，因子越大
+    const distRatio = Math.abs(orderPrice - nearestResistance.price) / currentPrice;
+    if (distRatio < 0.01) { // 1%以内
+      factor *= (1 + nearestResistance.strength * 0.5);
+    } else if (distRatio < 0.03) { // 3%以内
+      factor *= (1 + nearestResistance.strength * 0.3);
+    }
+  }
+  
+  return factor;
+}
+
+// 计算市场趋势因子（考虑趋势强度和持续性）
+function calculateTrendFactor(
+  tradeDirection: 'buy' | 'sell',
+  marketTrend?: 'up' | 'down' | 'sideways',
+  trendStrength?: number, // 趋势强度（0-1）
+  trendDuration?: number // 趋势持续时间（秒）
+): number {
+  let factor = 1.0;
+  
+  if (!marketTrend) return factor;
+  
+  // 基础趋势因子
+  if ((marketTrend === 'up' && tradeDirection === 'buy') || 
+      (marketTrend === 'down' && tradeDirection === 'sell')) {
+    factor = 1.2;
+  } else if ((marketTrend === 'up' && tradeDirection === 'sell') || 
+             (marketTrend === 'down' && tradeDirection === 'buy')) {
+    factor = 1.05; // 逆势交易的大单也值得关注
+  }
+  
+  // 趋势强度调整
+  if (trendStrength && trendStrength > 0.5) {
+    factor *= (1 + (trendStrength - 0.5) * 0.4);
+  }
+  
+  // 趋势持续时间调整
+  if (trendDuration) {
+    // 持续时间越长，因子越大（最多增加0.3）
+    const durationAdjustment = Math.min(0.3, (trendDuration / 3600) * 0.3); // 每小时增加0.3，最多0.3
+    factor *= (1 + durationAdjustment);
+  }
+  
+  return factor;
+}
+
+// 计算成交量趋势因子
+function calculateVolumeFactor(
+  volumeTrend?: 'up' | 'down' | 'stable',
+  volumeChangeRatio?: number // 成交量变化率
+): number {
+  let factor = 1.0;
+  
+  if (!volumeTrend) return factor;
+  
+  // 成交量放大时，因子增大
+  if (volumeTrend === 'up' && volumeChangeRatio) {
+    // 成交量放大越多，因子越大（最多增加0.4）
+    const volumeAdjustment = Math.min(0.4, Math.max(0, volumeChangeRatio - 1) * 0.4);
+    factor *= (1 + volumeAdjustment);
+  }
+  
+  return factor;
+}
+
+// 识别单个特大单（增强版，提高识别精度）
 export function identifySingleLargeOrder(
   order: OrderItem, 
-  threshold: DynamicThreshold | EnhancedDynamicThreshold
+  threshold: DynamicThreshold | EnhancedDynamicThreshold,
+  marketContext?: { 
+    currentPrice: number; 
+    priceLevel?: 'support' | 'resistance' | 'middle'; 
+    marketTrend?: 'up' | 'down' | 'sideways';
+    trendStrength?: number; // 趋势强度（0-1）
+    trendDuration?: number; // 趋势持续时间（秒）
+    volumeTrend?: 'up' | 'down' | 'stable'; // 成交量趋势
+    volumeChangeRatio?: number; // 成交量变化率
+    supportLevels?: Array<{ price: number; strength: number }>; // 支撑位
+    resistanceLevels?: Array<{ price: number; strength: number }>; // 压力位
+  }
 ): LargeOrderResult {
-  // 不同级别的订单阈值
-  const extraLargeThreshold = threshold.threshold * 1.5;
-  const hugeOrderThreshold = threshold.threshold * 3.0;
+  // 计算动态阈值倍数
+  const extraLargeFactor = 1.5;
+  const hugeOrderFactor = 3.0;
   
+  const extraLargeThreshold = threshold.threshold * extraLargeFactor;
+  const hugeOrderThreshold = threshold.threshold * hugeOrderFactor;
+  
+  // 计算更精确的比例
   const amountRatio = threshold.mean > 0 ? order.tradeAmount / threshold.mean : 0;
   const thresholdRatio = threshold.threshold > 0 ? order.tradeAmount / threshold.threshold : 0;
   
-  // 确定订单大小等级
+  // 计算更精细的价格位置因子
+  const positionFactor = calculatePositionFactor(
+    order.tradePrice,
+    marketContext?.currentPrice || order.tradePrice,
+    marketContext?.priceLevel,
+    marketContext?.supportLevels,
+    marketContext?.resistanceLevels
+  );
+  
+  // 计算增强的市场趋势因子
+  const trendFactor = calculateTrendFactor(
+    order.tradeDirection,
+    marketContext?.marketTrend,
+    marketContext?.trendStrength,
+    marketContext?.trendDuration
+  );
+  
+  // 计算成交量趋势因子
+  const volumeFactor = calculateVolumeFactor(
+    marketContext?.volumeTrend,
+    marketContext?.volumeChangeRatio
+  );
+  
+  // 综合加权因子
+  const combinedFactor = positionFactor * trendFactor * volumeFactor;
+  
+  // 动态调整的实际阈值
+  const adjustedThreshold = threshold.threshold * combinedFactor;
+  const adjustedExtraLargeThreshold = extraLargeThreshold * combinedFactor;
+  const adjustedHugeThreshold = hugeOrderThreshold * combinedFactor;
+  
+  // 确定订单大小等级（更细粒度的划分）
   let sizeLevel: 'small' | 'medium' | 'large' | 'extra' | 'huge' = 'small';
-  if (order.tradeAmount > hugeOrderThreshold) {
+  let isLargeOrder = false;
+  let isExtraLargeOrder = false;
+  let isHugeOrder = false;
+  
+  if (order.tradeAmount > adjustedHugeThreshold) {
     sizeLevel = 'huge';
-  } else if (order.tradeAmount > extraLargeThreshold) {
+    isLargeOrder = true;
+    isExtraLargeOrder = true;
+    isHugeOrder = true;
+  } else if (order.tradeAmount > adjustedExtraLargeThreshold) {
     sizeLevel = 'extra';
-  } else if (order.tradeAmount > threshold.threshold) {
+    isLargeOrder = true;
+    isExtraLargeOrder = true;
+    isHugeOrder = false;
+  } else if (order.tradeAmount > adjustedThreshold) {
     sizeLevel = 'large';
+    isLargeOrder = true;
+    isExtraLargeOrder = false;
+    isHugeOrder = false;
   } else if (order.tradeAmount > threshold.mean) {
     sizeLevel = 'medium';
+    isLargeOrder = false;
+    isExtraLargeOrder = false;
+    isHugeOrder = false;
+  } else {
+    sizeLevel = 'small';
+    isLargeOrder = false;
+    isExtraLargeOrder = false;
+    isHugeOrder = false;
   }
+  
+  // 计算订单的重要性评分（用于后续的意图分析）
+  const importanceScore = thresholdRatio * positionFactor * trendFactor;
   
   return {
     order,
-    isLargeOrder: order.tradeAmount > threshold.threshold,
-    isExtraLargeOrder: order.tradeAmount > extraLargeThreshold,
-    isHugeOrder: order.tradeAmount > hugeOrderThreshold,
+    isLargeOrder,
+    isExtraLargeOrder,
+    isHugeOrder,
     amountRatio,
     thresholdRatio,
     sizeLevel,
+    importanceScore,
+    positionFactor,
+    trendFactor,
+    volumeFactor,
+    combinedFactor,
     timestamp: Date.now()
   };
 }
+
+
 
 // 批量识别特大单
 export function identifyLargeOrders(
@@ -449,21 +734,45 @@ export class FlinkStyleOrderStreamProcessor implements EnhancedOrderStreamProces
   };
   private maxHistorySize: number = 1000;
   private n: number = 2;
+  private marketContext: { 
+    currentPrice: number; 
+    priceLevel?: 'support' | 'resistance' | 'middle'; 
+    marketTrend?: 'up' | 'down' | 'sideways';
+  } | null = null;
+  private useRobustStats: boolean = true;
+  private useVolumeWeight: boolean = true;
+  private adaptiveN: boolean = true;
   
-  constructor(windowConfigs: WindowConfig[], n: number = 2) {
-    this.n = n;
+  constructor(windowConfigs: WindowConfig[], config: { n?: number, useRobustStats?: boolean, useVolumeWeight?: boolean, adaptiveN?: boolean } = {}) {
+    this.n = config.n || 2;
+    this.useRobustStats = config.useRobustStats !== false;
+    this.useVolumeWeight = config.useVolumeWeight !== false;
+    this.adaptiveN = config.adaptiveN !== false;
+    
     // 创建不同类型的窗口处理器
     windowConfigs.forEach((config, index) => {
-      this.windowProcessors.set(`window-${index}-${config.type}`, new WindowProcessor(config, n));
+      this.windowProcessors.set(`window-${index}-${config.type}`, new WindowProcessor(config, this.n));
     });
   }
   
+  // 设置市场上下文信息（用于更精确的特大单识别）
+  setMarketContext(context: { currentPrice: number; priceLevel?: 'support' | 'resistance' | 'middle'; marketTrend?: 'up' | 'down' | 'sideways' }): void {
+    this.marketContext = context;
+  }
+  
   processOrder(order: OrderItem): LargeOrderResult {
+    // 更新当前价格
+    if (!this.marketContext) {
+      this.marketContext = { currentPrice: order.tradePrice };
+    } else {
+      this.marketContext.currentPrice = order.tradePrice;
+    }
+    
     // 更新动态阈值
     this.updateDynamicThreshold(order);
     
-    // 识别单个特大单
-    const result = identifySingleLargeOrder(order, this.currentThreshold);
+    // 识别单个特大单（使用市场上下文提高精度）
+    const result = identifySingleLargeOrder(order, this.currentThreshold, this.marketContext);
     
     // 将结果添加到历史记录
     this.largeOrderResults.push(result);
@@ -480,11 +789,19 @@ export class FlinkStyleOrderStreamProcessor implements EnhancedOrderStreamProces
   }
   
   private updateDynamicThreshold(order: OrderItem): void {
-    // 使用高效版动态阈值计算
+    // 使用高效版动态阈值计算，启用所有增强功能
     const recentOrders = this.largeOrderResults.slice(-1000).map(result => result.order);
     recentOrders.push(order);
     
-    this.currentThreshold = calculateEfficientDynamicThreshold(recentOrders, this.n);
+    this.currentThreshold = calculateEfficientDynamicThreshold(
+      recentOrders, 
+      this.n,
+      this.useRobustStats,
+      60000, // 60秒时间窗口
+      this.useVolumeWeight,
+      this.adaptiveN,
+      true // 启用波动率调整
+    );
   }
   
   getCurrentThreshold(): DynamicThreshold {
@@ -543,6 +860,11 @@ export class WindowProcessor<T extends { tradeTime: string }> {
   private n: number = 2;
   private currentCount: number = 0;
   private lastWatermarkUpdate: number = Date.now();
+  private maxActiveWindows: number = 1000; // 最大活跃窗口数量
+  private maxWindowElements: number = 5000; // 每个窗口的最大元素数量
+  private closedWindowTTL: number = 300000; // 关闭窗口的保留时间（5分钟）
+  private lastCleanupTime: number = Date.now();
+  private cleanupInterval: number = 60000; // 清理间隔（1分钟）
   
   constructor(windowConfig: WindowConfig, n: number = 2, stateBackend?: StateBackend) {
     this.windowConfig = windowConfig;
@@ -555,6 +877,12 @@ export class WindowProcessor<T extends { tradeTime: string }> {
     // 获取事件时间（根据配置选择时间语义）
     const eventTime = this.getEventTime(order);
     const currentTime = Date.now();
+    
+    // 定期清理（防止内存泄漏）
+    if (currentTime - this.lastCleanupTime > this.cleanupInterval) {
+      this.performCleanup();
+      this.lastCleanupTime = currentTime;
+    }
     
     // 更新水位线
     this.updateWatermark(eventTime, currentTime);
@@ -574,6 +902,60 @@ export class WindowProcessor<T extends { tradeTime: string }> {
     this.cleanExpiredWindows();
     
     return windowIds;
+  }
+  
+  // 执行全面清理
+  private performCleanup(): void {
+    // 1. 清理过期的关闭窗口
+    this.cleanExpiredClosedWindows();
+    
+    // 2. 限制活跃窗口数量
+    this.limitActiveWindows();
+  }
+  
+  // 清理过期的关闭窗口
+  private cleanExpiredClosedWindows(): void {
+    const currentTime = Date.now();
+    const expiredWindows: string[] = [];
+    
+    for (const [windowId, state] of this.windowStates.entries()) {
+      if (state.isClosed && currentTime - state.endTime > this.closedWindowTTL) {
+        expiredWindows.push(windowId);
+      }
+    }
+    
+    // 清理过期窗口
+    for (const windowId of expiredWindows) {
+      this.windowStates.delete(windowId);
+      this.stateBackend.delete(`window-${windowId}`);
+      this.stateBackend.delete(`window-${windowId}-closed`);
+    }
+  }
+  
+  // 限制活跃窗口数量
+  private limitActiveWindows(): void {
+    if (this.windowStates.size <= this.maxActiveWindows) {
+      return; // 未超过限制
+    }
+    
+    // 获取所有活跃窗口
+    const activeWindows: { windowId: string; state: WindowState<T> }[] = [];
+    for (const [windowId, state] of this.windowStates.entries()) {
+      if (!state.isClosed) {
+        activeWindows.push({ windowId, state });
+      }
+    }
+    
+    // 如果活跃窗口超过限制，关闭最旧的窗口
+    if (activeWindows.length > this.maxActiveWindows) {
+      // 按开始时间排序，关闭最旧的窗口
+      activeWindows.sort((a, b) => a.state.startTime - b.state.startTime);
+      
+      const windowsToClose = activeWindows.slice(0, activeWindows.length - this.maxActiveWindows);
+      for (const { windowId } of windowsToClose) {
+        this.closeWindow(windowId);
+      }
+    }
   }
   
   // 获取事件时间
@@ -738,6 +1120,12 @@ export class WindowProcessor<T extends { tradeTime: string }> {
     // 更新窗口结束时间（适用于会话窗口和计数窗口）
     if (this.windowConfig.type === 'session' || this.windowConfig.type === 'count') {
       state.endTime = Math.max(state.endTime, eventTime);
+    }
+    
+    // 限制窗口元素数量，防止内存溢出
+    if (state.elements.length >= this.maxWindowElements) {
+      // 移除最旧的元素
+      state.elements.shift();
     }
     
     // 添加事件到窗口
@@ -906,6 +1294,11 @@ export class WindowProcessor<T extends { tradeTime: string }> {
     this.watermark = { timestamp: 0, ingestionTime: 0, eventTime: 0 };
     this.stateBackend.clear();
   }
+
+  // 添加公共getter方法访问窗口配置大小
+  get windowSize(): number {
+    return this.windowConfig.size;
+  }
 }
 
 // 增强的实时特大单处理器（支持Flink式批流处理）
@@ -936,6 +1329,14 @@ export class EnhancedRealTimeLargeOrderProcessor implements EnhancedOrderStreamP
   private operatorChain: Array<(order: OrderItem) => OrderItem> = []; // 操作符链
   private checkpointInterval: number = 30000; // 检查点间隔（30秒）
   private lastCheckpointTime: number = Date.now();
+  private marketContext: { 
+    currentPrice: number; 
+    priceLevel?: 'support' | 'resistance' | 'middle'; 
+    marketTrend?: 'up' | 'down' | 'sideways';
+  } | null = null;
+  private useRobustStats: boolean = true;
+  private useVolumeWeight: boolean = true;
+  private adaptiveN: boolean = true;
   
   constructor(maxBufferSize: number = 10000, n: number = 2, stateBackend?: StateBackend, parallelism: number = 4) {
     this.maxBufferSize = maxBufferSize;
@@ -1058,6 +1459,13 @@ export class EnhancedRealTimeLargeOrderProcessor implements EnhancedOrderStreamP
       processedOrder = operator(processedOrder);
     }
     
+    // 更新市场上下文（当前价格）
+    if (!this.marketContext) {
+      this.marketContext = { currentPrice: processedOrder.tradePrice };
+    } else {
+      this.marketContext.currentPrice = processedOrder.tradePrice;
+    }
+    
     // 添加到全局缓冲
     this.orderBuffer.push(processedOrder);
     
@@ -1066,25 +1474,63 @@ export class EnhancedRealTimeLargeOrderProcessor implements EnhancedOrderStreamP
       this.orderBuffer.shift();
     }
     
-    // 更新所有窗口处理器
+    // 更新所有窗口处理器（异步处理，优化性能）
+    const processPromises: Promise<void>[] = [];
+    
     for (const [name, processor] of this.windowProcessors.entries()) {
       const windowIds = processor.processOrder(processedOrder);
       
-      // 计算窗口阈值和识别特大单
-      for (const windowId of windowIds) {
-        const windowState = processor.getWindowState(windowId);
-        if (windowState && windowState.elements.length > 0) {
-          const windowOrders = windowState.elements;
-          const windowThreshold = calculateEnhancedDynamicThreshold(windowOrders, this.n);
-          
-          // 识别特大单
-          const windowResults = windowOrders.map(ord => identifySingleLargeOrder(ord, windowThreshold));
-          
-          // 这里可以添加窗口结果的保存逻辑
-          this.stateBackend.put(`window-results-${windowId}`, windowResults);
-        }
+      // 只处理最近活跃的窗口，减少不必要的计算
+      const recentWindowIds = windowIds.slice(-5); // 只处理最近5个窗口
+      
+      if (recentWindowIds.length > 0) {
+        // 使用更轻量的异步处理，避免创建过多Promise
+        const processTask = () => {
+          try {
+            for (const windowId of recentWindowIds) {
+              const windowState = processor.getWindowState(windowId);
+              if (windowState && windowState.elements.length > 0) {
+                // 只处理有新元素的窗口
+                if (windowState.elements[windowState.elements.length - 1] === processedOrder) {
+                  const windowOrders = windowState.elements;
+                  // 使用高效动态阈值计算
+                  const windowThreshold = calculateEfficientDynamicThreshold(
+                    windowOrders, 
+                    this.n,
+                    this.useRobustStats,
+                    this.windowProcessors.get(name)?.windowSize || 60000,
+                    this.useVolumeWeight,
+                    this.adaptiveN,
+                    true // 启用波动率调整
+                  );
+                  
+                  // 识别特大单（使用市场上下文提高精度）
+                  const windowResults = windowOrders.map(ord => 
+                    identifySingleLargeOrder(ord, windowThreshold, this.marketContext || undefined)
+                  );
+                  
+                  // 保存窗口结果到状态后端（异步但不等待）
+                  this.stateBackend.put(`window-results-${windowId}`, windowResults);
+                }
+              }
+            }
+          } catch (error) {
+            console.error(`Window processing error for processor ${name}:`, error);
+          }
+        };
+        
+        // 使用setTimeout将计算放到下一个事件循环，避免阻塞主线程
+        processPromises.push(new Promise(resolve => {
+          setTimeout(() => {
+            processTask();
+            resolve();
+          }, 0);
+        }));
       }
     }
+    
+    // 不等待异步处理完成，继续执行主线程
+    // 如果需要等待结果，可以返回processPromises
     
     // 定期更新全局阈值（每100个订单或1秒）
     if (this.orderBuffer.length % 100 === 0 || Date.now() - this.lastProcessTime > 1000) {
@@ -1095,8 +1541,8 @@ export class EnhancedRealTimeLargeOrderProcessor implements EnhancedOrderStreamP
       this.stateBackend.put('current-threshold', this.currentThreshold);
     }
     
-    // 识别当前订单
-    const result = identifySingleLargeOrder(processedOrder, this.currentThreshold);
+    // 识别当前订单（使用市场上下文）
+    const result = identifySingleLargeOrder(processedOrder, this.currentThreshold, this.marketContext);
     
     // 添加到结果历史（限制结果数量）
     this.results.push(result);
@@ -1104,8 +1550,10 @@ export class EnhancedRealTimeLargeOrderProcessor implements EnhancedOrderStreamP
       this.results.shift();
     }
     
-    // 保存结果到状态后端
-    this.stateBackend.put(`result-${result.timestamp}`, result);
+    // 保存结果到状态后端（异步）
+    Promise.resolve().then(() => {
+      this.stateBackend.put(`result-${result.timestamp}`, result);
+    });
     
     const processingTime = Date.now() - startTime;
     if (processingTime > 10) { // 监控处理延迟
@@ -1254,7 +1702,28 @@ export class EnhancedRealTimeLargeOrderProcessor implements EnhancedOrderStreamP
     
     // 使用最近的1000个订单计算阈值，提高实时性
     const recentOrders = this.orderBuffer.slice(-1000);
-    return calculateEnhancedDynamicThreshold(recentOrders, this.n);
+    
+    // 先使用高效动态阈值计算基本统计信息
+    const efficientThreshold = calculateEfficientDynamicThreshold(
+      recentOrders, 
+      this.n,
+      this.useRobustStats,
+      60000, // 60秒时间窗口
+      this.useVolumeWeight,
+      this.adaptiveN,
+      true // 启用波动率调整
+    );
+    
+    // 然后转换为增强阈值格式（包含更多统计信息）
+    const enhancedThreshold = calculateEnhancedDynamicThreshold(recentOrders, efficientThreshold.n);
+    
+    // 合并结果，保留高效阈值的动态调整参数
+    return {
+      ...enhancedThreshold,
+      n: efficientThreshold.n, // 使用高效阈值的动态调整n值
+      threshold: efficientThreshold.threshold, // 使用高效阈值的计算结果
+      upperThreshold: efficientThreshold.upperThreshold
+    };
   }
   
   // 获取当前并行度
@@ -1521,8 +1990,81 @@ export interface OrderIntentionAnalysisResult {
     priceFactor: number; // 价格因子（0-1）
     trendFactor: number; // 趋势因子（0-1）
     volumeFactor: number; // 成交量因子（0-1）
+    supportResistanceFactor: number; // 支撑/压力位因子（-1-1）
+    pricePositionFactor: number; // 价格位置因子（-1-1）
+    combinedFactor: number; // 综合加权因子（0-∞）
   };
   analysisTime: number; // 分析时间戳（毫秒）
+}
+
+// 检测订单是否在支撑/压力位附近（增强版）
+function detectSupportResistanceLevel(
+  orderPrice: number, 
+  levels: Array<{ price: number; strength: number }>,
+  currentPrice: number
+): { isNearLevel: boolean; nearestLevel: { price: number; strength: number }; distanceRatio: number } {
+  if (!levels || levels.length === 0) {
+    return { isNearLevel: false, nearestLevel: { price: 0, strength: 0 }, distanceRatio: 0 };
+  }
+  
+  // 找到最近的支撑/压力位
+  let nearestLevel = levels[0];
+  let minDistance = Math.abs(orderPrice - nearestLevel.price);
+  
+  for (const level of levels) {
+    const distance = Math.abs(orderPrice - level.price);
+    if (distance < minDistance) {
+      minDistance = distance;
+      nearestLevel = level;
+    }
+  }
+  
+  // 计算距离比率（考虑价格水平和强度）
+  const distanceRatio = currentPrice > 0 ? minDistance / currentPrice : 0;
+  
+  // 动态判断是否接近支撑/压力位，考虑支撑/压力位强度
+  // 强度越高，允许的距离范围越大
+  const proximityThreshold = 0.02 - (nearestLevel.strength * 0.01); // 2% - (强度 * 1%)
+  
+  return {
+    isNearLevel: distanceRatio < proximityThreshold,
+    nearestLevel,
+    distanceRatio
+  };
+}
+
+// 计算订单时序因子（基于订单在时间序列中的位置）
+function calculateTemporalFactor(
+  orderIndex: number,
+  totalOrders: number,
+  timeSinceFirstOrder: number // 从第一个订单到当前订单的时间（秒）
+): number {
+  // 订单在序列中的位置因子
+  const positionFactor = orderIndex / totalOrders;
+  
+  // 时间密度因子（订单越密集，因子越大）
+  const timeDensityFactor = totalOrders / Math.max(1, timeSinceFirstOrder / 60); // 每分钟订单数
+  const normalizedDensity = Math.min(1, timeDensityFactor / 100); // 标准化到0-1
+  
+  return positionFactor * 0.5 + normalizedDensity * 0.5;
+}
+
+// 计算价格冲击因子（增强版）
+function calculateEnhancedPriceImpactFactor(
+  priceImpact: number | undefined,
+  orderSize: number,
+  marketDepth: number // 市场深度（可用流动性）
+): number {
+  if (priceImpact === undefined) return 0;
+  
+  // 基础价格冲击因子
+  const baseImpactFactor = Math.min(1, Math.abs(priceImpact) / 10);
+  
+  // 调整因子：考虑订单大小与市场深度的比例
+  const depthRatio = orderSize / Math.max(1, marketDepth);
+  const depthAdjustment = Math.min(0.5, depthRatio * 2);
+  
+  return baseImpactFactor + depthAdjustment;
 }
 
 // 单个订单意图分析
@@ -1545,9 +2087,23 @@ export function analyzeOrderIntention(
   const priceDiff = order.tradePrice - currentPrice;
   const priceDiffRatio = currentPrice > 0 ? Math.abs(priceDiff) / currentPrice : 0;
   
-  // 计算各个因子
+  // 改进的支撑/压力位检测
+  const supportDetection = detectSupportResistanceLevel(order.tradePrice, supportLevels, currentPrice);
+  const resistanceDetection = detectSupportResistanceLevel(order.tradePrice, resistanceLevels, currentPrice);
+  
+  const isNearSupport = supportDetection.isNearLevel;
+  const isNearResistance = resistanceDetection.isNearLevel;
+  const supportStrength = supportDetection.nearestLevel.strength;
+  const resistanceStrength = resistanceDetection.nearestLevel.strength;
+  const supportDistanceRatio = supportDetection.distanceRatio;
+  const resistanceDistanceRatio = resistanceDetection.distanceRatio;
+  
+  // 计算增强的各个因子
   const sizeFactor = Math.min(1, largeOrderResult.thresholdRatio / 3); // 订单大小因子
-  const priceFactor = priceImpact !== undefined ? Math.min(1, Math.abs(priceImpact) / 10) : 0; // 价格冲击因子
+  const combinedFactor = largeOrderResult.combinedFactor || 1.0; // 使用之前计算的综合因子
+  
+  // 价格冲击因子（增强版）
+  const priceFactor = calculateEnhancedPriceImpactFactor(priceImpact, order.tradeVolume, 1000000); // 假设市场深度为100万股
   
   // 趋势因子（根据趋势和订单方向的一致性）
   let trendFactor = 0;
@@ -1561,67 +2117,95 @@ export function analyzeOrderIntention(
     trendFactor = -0.5;
   }
   
-  // 成交量因子
+  // 成交量因子（增强版）
   const volumeFactor = volumeTrend === 'up' ? 0.3 : (volumeTrend === 'down' ? -0.3 : 0);
   
-  // 检查支撑位/压力位
-  let isNearSupport = false;
-  let isNearResistance = false;
-  let supportStrength = 0;
-  let resistanceStrength = 0;
+  // 支撑/压力位因子
+  const supportResistanceFactor = isNearSupport ? supportStrength * 0.5 : 
+                                 isNearResistance ? -resistanceStrength * 0.5 : 0;
   
-  // 检查是否接近支撑位
-  for (const support of supportLevels) {
-    const priceDistance = Math.abs(order.tradePrice - support.price);
-    const priceRatio = support.price > 0 ? priceDistance / support.price : 0;
-    if (priceRatio < 0.02) { // 在支撑位2%范围内
-      isNearSupport = true;
-      supportStrength = support.strength;
-      break;
-    }
-  }
-  
-  // 检查是否接近压力位
-  for (const resistance of resistanceLevels) {
-    const priceDistance = Math.abs(order.tradePrice - resistance.price);
-    const priceRatio = resistance.price > 0 ? priceDistance / resistance.price : 0;
-    if (priceRatio < 0.02) { // 在压力位2%范围内
-      isNearResistance = true;
-      resistanceStrength = resistance.strength;
-      break;
-    }
-  }
+  // 价格位置因子（基于订单价格与当前价格的关系）
+  const pricePositionFactor = isBuyOrder ? (priceDiff >= 0 ? 0.3 : -0.3) : 
+                             (priceDiff <= 0 ? 0.3 : -0.3);
   
   // 确定订单意图
   let intention: OrderIntention = 'normalTrade';
   let confidence = 0.5;
   
-  // 基于支撑位/压力位的意图判断
-  if (isBuyOrder && isNearSupport && supportStrength > 0.5) {
-    intention = 'supportBuy';
-    confidence = 0.7 + supportStrength * 0.2 + sizeFactor * 0.1;
-  } else if (!isBuyOrder && isNearResistance && resistanceStrength > 0.5) {
-    intention = 'resistanceSell';
-    confidence = 0.7 + resistanceStrength * 0.2 + sizeFactor * 0.1;
+  // 计算综合意图得分
+  const intentionScores: { [key in OrderIntention]: number } = {
+    'accumulation': 0,
+    'distribution': 0,
+    'supportBuy': 0,
+    'resistanceSell': 0,
+    'panicBuy': 0,
+    'panicSell': 0,
+    'normalTrade': 0.5,
+    'unknown': 0
+  };
+  
+  // 基于支撑位的意图评分
+  if (isBuyOrder && isNearSupport) {
+    intentionScores.supportBuy = 0.7 + 
+                                supportStrength * 0.2 + 
+                                sizeFactor * 0.1 +
+                                (1 - supportDistanceRatio) * 0.2;
   }
-  // 基于订单大小和方向的意图判断
-  else if (isBuyOrder && isLargeOrder && sizeFactor > 0.5 && recentPriceTrend === 'down') {
-    intention = 'accumulation';
-    confidence = 0.6 + sizeFactor * 0.3 + volumeFactor * 0.1;
-  } else if (!isBuyOrder && isLargeOrder && sizeFactor > 0.5 && recentPriceTrend === 'up') {
-    intention = 'distribution';
-    confidence = 0.6 + sizeFactor * 0.3 + volumeFactor * 0.1;
+  
+  // 基于压力位的意图评分
+  if (!isBuyOrder && isNearResistance) {
+    intentionScores.resistanceSell = 0.7 + 
+                                    resistanceStrength * 0.2 + 
+                                    sizeFactor * 0.1 +
+                                    (1 - resistanceDistanceRatio) * 0.2;
   }
-  // 基于价格冲击的意图判断
-  else if (priceImpact !== undefined) {
-    if (priceImpact > 3 && isBuyOrder) { // 买入造成价格大幅上涨
-      intention = 'panicBuy';
-      confidence = 0.7 + priceFactor * 0.3;
-    } else if (priceImpact < -3 && !isBuyOrder) { // 卖出造成价格大幅下跌
-      intention = 'panicSell';
-      confidence = 0.7 + priceFactor * 0.3;
+  
+  // 基于吸筹/出货的意图评分
+  if (isBuyOrder && isLargeOrder && sizeFactor > 0.5) {
+    intentionScores.accumulation = 0.6 + 
+                                  sizeFactor * 0.3 + 
+                                  volumeFactor * 0.1 +
+                                  (recentPriceTrend === 'down' ? 0.3 : 0);
+  } else if (!isBuyOrder && isLargeOrder && sizeFactor > 0.5) {
+    intentionScores.distribution = 0.6 + 
+                                  sizeFactor * 0.3 + 
+                                  volumeFactor * 0.1 +
+                                  (recentPriceTrend === 'up' ? 0.3 : 0);
+  }
+  
+  // 基于恐慌性交易的意图评分
+  if (priceImpact !== undefined) {
+    if (priceImpact > 3 && isBuyOrder) {
+      intentionScores.panicBuy = 0.7 + 
+                                priceFactor * 0.3 +
+                                sizeFactor * 0.2;
+    } else if (priceImpact < -3 && !isBuyOrder) {
+      intentionScores.panicSell = 0.7 + 
+                                priceFactor * 0.3 +
+                                sizeFactor * 0.2;
     }
   }
+  
+  // 选择得分最高的意图
+  let maxScore = 0;
+  for (const [intent, score] of Object.entries(intentionScores)) {
+    if (score > maxScore) {
+      maxScore = score;
+      intention = intent as OrderIntention;
+    }
+  }
+  
+  // 计算最终置信度，考虑所有相关因子
+  confidence = Math.max(
+    0.5, // 最低置信度
+    Math.min(
+      1.0, // 最高置信度
+      maxScore + 
+      combinedFactor * 0.1 +
+      supportResistanceFactor * 0.1 +
+      pricePositionFactor * 0.1
+    )
+  );
   
   // 确保置信度在0-1之间
   confidence = Math.max(0, Math.min(1, confidence));
@@ -1634,7 +2218,10 @@ export function analyzeOrderIntention(
       sizeFactor,
       priceFactor,
       trendFactor,
-      volumeFactor
+      volumeFactor,
+      supportResistanceFactor,
+      pricePositionFactor,
+      combinedFactor
     },
     analysisTime: Date.now()
   };

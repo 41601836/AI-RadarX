@@ -32,22 +32,11 @@ function generateMockKLineData() {
 
 // 处理K线数据请求
 async function handleKLineRequest(request: NextRequest) {
-  try {
-    // 生成模拟数据
-    const mockData = generateMockKLineData();
-    
-    // 返回成功响应
-    return mockData;
-  } catch (error) {
-    console.error('Error handling K-line request:', error);
-    return {
-      code: 500,
-      msg: 'Internal Server Error',
-      data: null,
-      requestId: `req-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`,
-      timestamp: Date.now()
-    };
-  }
+  // 生成模拟数据
+  const mockData = generateMockKLineData();
+  
+  // 返回成功响应
+  return mockData;
 }
 
 export async function GET(request: NextRequest) {

@@ -8,7 +8,7 @@ module.exports = {
     '^.+\.tsx?$': 'ts-jest'
   },
   moduleNameMapping: {
-    '@/(.*)$': '<rootDir>/lib/$1'
+    '^@/(.*)$': '<rootDir>/$1'
   },
   verbose: true
 };

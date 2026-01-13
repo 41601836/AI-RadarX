@@ -1,5 +1,6 @@
 import { ApiResponse } from './response';
 import { ApiError, errorResponse, ErrorCode } from './errors';
+import { apiClient } from '../client';
 
 // API请求配置接口
 export interface ApiRequestConfig {
@@ -46,13 +47,13 @@ export async function apiRequest<T>(
   config: ApiRequestConfig = {},
   mockGenerator?: MockDataGenerator<T>
 ): Promise<ApiResponse<T>> {
-  // 强制mock模式逻辑：如果环境变量MOCK=true，直接返回Mock，禁止执行任何fetch
+  // 强制mock模式逻辑：如果环境变量NEXT_PUBLIC_API_MOCK=true，直接返回Mock，禁止执行任何fetch
   // 确保在客户端环境下检查，避免服务端渲染时的问题
   const isClient = typeof window !== 'undefined';
-  const shouldForceMock = isClient && process.env.MOCK === 'true';
+  const shouldForceMock = isClient && process.env.NEXT_PUBLIC_API_MOCK === 'true';
   
-  // 优先使用MOCK环境变量，兼容原有NEXT_PUBLIC_API_MOCK
-  const shouldUseLegacyMock = isClient && !shouldForceMock && process.env.NEXT_PUBLIC_API_MOCK === 'true';
+  // 兼容原有MOCK环境变量
+  const shouldUseLegacyMock = isClient && !shouldForceMock && process.env.MOCK === 'true';
   
   if (shouldForceMock || shouldUseLegacyMock) {
     console.log(`[FORCE MOCK MODE] Intercepting ALL requests to: ${BASE_API_URL}${endpoint}`);
@@ -221,69 +222,44 @@ export async function apiRequest<T>(
   }
 
   // 非Mock模式下的真实API请求
-  // 构建请求选项
-  const requestOptions: RequestInit = {
-    method,
-    headers: requestHeaders,
-    credentials: 'include',
-  };
-
-  // 添加请求体
-  if (body && method !== 'GET') {
-    requestOptions.body = JSON.stringify(body);
-  }
-
   try {
-    // 发送请求
-    const response = await fetch(url, requestOptions);
-
-    // 检查响应内容类型
-    const contentType = response.headers.get('content-type');
-    let data: any;
-
-    if (!response.ok) {
-      // 如果响应不是OK，检查是否为JSON
-      if (contentType && contentType.includes('application/json')) {
-        // 如果是JSON，尝试解析
-        data = await response.json();
-        const errorCode = (data.code as ErrorCode) || ErrorCode.INTERNAL_SERVER_ERROR;
-        const errorMessage = data.msg || `HTTP error! status: ${response.status}`;
-        console.error(`API请求失败: ${errorMessage}`);
-        throw new ApiError(errorCode, errorMessage);
-      } else {
-        // 如果不是JSON，直接获取文本并抛出错误
-        const text = await response.text();
-        // 检查是否以"Internal"开头
-        if (text.startsWith('Internal')) {
-          console.error(`API请求失败: ${text}`);
-          throw new ApiError(ErrorCode.INTERNAL_SERVER_ERROR, text);
-        }
-        // 其他非JSON错误
-        console.error(`API请求失败: HTTP error! status: ${response.status}, text: ${text}`);
-        throw new ApiError(ErrorCode.INTERNAL_SERVER_ERROR, `HTTP error! status: ${response.status}`);
-      }
+    let response: ApiResponse<T>;
+    
+    // 根据请求方法使用不同的apiClient方法
+    switch (method) {
+      case 'GET':
+        response = await apiClient.get<T>(endpoint, { params: config.params });
+        break;
+      case 'POST':
+        response = await apiClient.post<T>(endpoint, body, { params: config.params });
+        break;
+      case 'PUT':
+        response = await apiClient.put<T>(endpoint, body, { params: config.params });
+        break;
+      case 'DELETE':
+        response = await apiClient.delete<T>(endpoint, { params: config.params });
+        break;
+      default:
+        throw new Error(`不支持的请求方法: ${method}`);
     }
-
-    // 如果响应是OK的，解析JSON
-    data = await response.json();
 
     // 确保返回的数据结构完整
-    if (!data.requestId) {
-      data.requestId = `req-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+    if (!response.requestId) {
+      response.requestId = `req-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
     }
-    if (!data.timestamp) {
-      data.timestamp = Date.now();
+    if (!response.timestamp) {
+      response.timestamp = Date.now();
     }
 
     // 返回响应数据
-    return data as ApiResponse<T>;
+    return response as ApiResponse<T>;
   } catch (error) {
     // 网络错误或其他错误处理
     if (error instanceof ApiError) {
       // 移除静默回退逻辑，直接抛出错误
       console.error(`API请求失败: ${error.message}`);
       throw error;
-    } else if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+    } else if (error instanceof Error && error.message.includes('网络连接失败')) {
       // 网络错误（包括ERR_CONNECTION_REFUSED），直接抛出错误
       console.error('服务连接失败（ERR_CONNECTION_REFUSED）:', error);
       throw new ApiError(ErrorCode.SERVICE_UNAVAILABLE, '服务连接失败，请检查网络');
@@ -302,8 +278,8 @@ export function apiGet<T>(
   config?: Omit<ApiRequestConfig, 'method' | 'body'>,
   mockGenerator?: MockDataGenerator<T>
 ): Promise<ApiResponse<T>> {
-  // 构建查询参数
-  const queryParams = params 
+  // 构建查询参数 - 安全处理：确保params是有效的对象
+  const queryParams = params && typeof params === 'object' && params !== null 
     ? `?${new URLSearchParams(params as Record<string, string>).toString()}`
     : '';
   

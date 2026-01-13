@@ -63,10 +63,10 @@ const calculateHealthScore = (position: PortfolioPosition): HealthScore => {
   const openPrices = klineData.map(d => d.open);
   
   // 计算技术指标
-  const rsi = calculateRSI({ close: closePrices, period: 14 });
-  const macd = calculateMACD({ close: closePrices });
-  const kdj = calculateKDJ({ high: highPrices, low: lowPrices, close: closePrices });
-  const bollinger = calculateBollingerBands({ close: closePrices });
+  const rsi = calculateRSI({ data: closePrices, period: 14 });
+  const macd = calculateMACD({ data: closePrices, fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 });
+  const kdj = calculateKDJ({ high: highPrices, low: lowPrices, close: closePrices, period: 9, kPeriod: 3, dPeriod: 3 });
+  const bollinger = calculateBollingerBands({ close: closePrices, period: 20, standardDeviations: 2 });
   
   // 计算RSI因子 (RSI在30-70之间为健康，否则不健康)
   const latestRSI = rsi[rsi.length - 1] || 50;
@@ -80,7 +80,7 @@ const calculateHealthScore = (position: PortfolioPosition): HealthScore => {
   }
   
   // 计算MACD因子 (MACD柱状图在合理范围内为健康)
-  const latestMACD = macd.bar[macd.bar.length - 1] || 0;
+  const latestMACD = macd.histogram[macd.histogram.length - 1] || 0;
   let macdFactor = 0;
   if (Math.abs(latestMACD) < 0.5) {
     macdFactor = 20; // 满分20分

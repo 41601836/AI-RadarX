@@ -1,9 +1,10 @@
 // 数据健康状态组件
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { usePolling } from '../lib/hooks/usePolling';
 import { checkTushareConnection, TushareStatus } from '../lib/api/common/tushare';
+import { logger } from '../lib/utils/logger';
 
 // 数据源类型
 export type DataSourceType = 
@@ -17,6 +18,11 @@ export type DataSourceType =
 // 数据健康状态接口
 export interface DataHealthStatus {
   tushare: TushareStatus;
+  localApi?: {
+    connected: boolean;
+    lastCheckTime: number;
+    error?: string;
+  };
   freeScanner?: {
     connected: boolean;
     lastCheckTime: number;
@@ -43,6 +49,11 @@ export default function DataHealth({ currentDataSource: externalDataSource }: Da
       lastCheckTime: 0,
       error: '正在检查连接...'
     },
+    localApi: {
+      connected: false,
+      lastCheckTime: 0,
+      error: '正在检查本地API...'
+    },
     freeScanner: {
       connected: false,
       lastCheckTime: 0,
@@ -55,11 +66,70 @@ export default function DataHealth({ currentDataSource: externalDataSource }: Da
     },
     currentDataSource: 'Mock'
   });
+  
+  // 跟踪本地API连接失败次数和时间
+  const localApiFailureRef = useRef<{
+    count: number;
+    lastFailureTime: number;
+  }>({
+    count: 0,
+    lastFailureTime: 0
+  });
+
+  // 检查本地后端API连接
+  const checkLocalApiConnection = async (): Promise<DataHealthStatus['localApi']> => {
+    try {
+      // 使用AbortController实现超时功能
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000); // 3秒超时
+
+      // 尝试连接到本地后端API进行健康检查
+      const response = await fetch('http://localhost:8080/api/v1/health', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      // 连接成功，重置失败计数
+      if (response.ok) {
+        localApiFailureRef.current.count = 0;
+      }
+
+      return {
+        connected: response.ok,
+        lastCheckTime: Date.now()
+      };
+    } catch (error) {
+      // 连接失败，增加失败计数
+      localApiFailureRef.current.count += 1;
+      localApiFailureRef.current.lastFailureTime = Date.now();
+      
+      // 记录警告日志
+      logger.warn('Java后端连接失败', {
+        failureCount: localApiFailureRef.current.count,
+        lastFailureTime: new Date(localApiFailureRef.current.lastFailureTime).toISOString(),
+        error: error instanceof Error ? error.message : '未知错误'
+      });
+
+      return {
+        connected: false,
+        lastCheckTime: Date.now(),
+        error: '本地后端API连接失败'
+      };
+    }
+  };
 
   const checkConnection = async () => {
     try {
       // 检查Tushare连接
       const tushareStatus = await checkTushareConnection();
+      
+      // 检查本地后端API连接
+      const localApiStatus = await checkLocalApiConnection();
       
       // 检查免费行情接口连接（模拟实现）
       const freeScannerStatus = await checkFreeScannerConnection();
@@ -72,6 +142,8 @@ export default function DataHealth({ currentDataSource: externalDataSource }: Da
       
       if (process.env.NEXT_PUBLIC_API_MOCK === 'true') {
         dataSource = 'Mock';
+      } else if (localApiStatus?.connected) {
+        dataSource = 'Local-API';
       } else if (tushareStatus.connected && freeScannerStatus?.connected) {
         dataSource = 'Hybrid-Realtime-Tushare';
       } else if (freeScannerStatus?.connected) {
@@ -87,6 +159,7 @@ export default function DataHealth({ currentDataSource: externalDataSource }: Da
       
       setStatus({
         tushare: tushareStatus,
+        localApi: localApiStatus,
         freeScanner: freeScannerStatus,
         aiEngine: aiEngineStatus,
         currentDataSource: dataSource
@@ -99,6 +172,12 @@ export default function DataHealth({ currentDataSource: externalDataSource }: Da
           connected: false,
           lastCheckTime: Date.now(),
           error: '检查连接失败'
+        },
+        localApi: {
+          ...prev.localApi!,
+          connected: false,
+          lastCheckTime: Date.now(),
+          error: '本地API检查失败'
         },
         freeScanner: {
           ...prev.freeScanner!,
@@ -263,55 +342,27 @@ export default function DataHealth({ currentDataSource: externalDataSource }: Da
   };
 
   return (
-    <div className="data-health">
+    <div className="flex items-center gap-2 px-3 py-1.5 bg-[#2a2a3a] rounded-md text-xs">
       <div 
-        className={`status-indicator ${getOverallStatusColor()}`} 
+        className={`text-base flex items-center ${getOverallStatusColor()}`} 
         title={`当前数据源: ${getOverallStatusText()}`}
       >
         {getOverallStatusIcon()}
       </div>
-      <span className={`status-text ${getOverallStatusColor()}`}>
+      <span className={`font-medium ${getOverallStatusColor()}`}>
         {getOverallStatusText()}
       </span>
 
       {/* AI引擎状态指示器 */}
       <div 
-        className={`status-indicator ai-engine ${getAIEngineStatusColor()}`} 
+        className={`text-base flex items-center ml-3 pl-3 border-l border-[#444] ${getAIEngineStatusColor()}`} 
         title={`AI引擎: ${status.aiEngine?.connected ? '正常' : '异常'}`}
       >
         {getAIEngineStatusIcon()}
       </div>
-      <span className={`status-text ai-engine ${getAIEngineStatusColor()}`}>
+      <span className={`font-medium ml-1 ${getAIEngineStatusColor()}`}>
         {status.aiEngine?.connected ? 'AI引擎在线' : 'AI引擎离线'}
       </span>
-
-      <style jsx>{`
-        .data-health {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          padding: 6px 12px;
-          background: #2a2a3a;
-          border-radius: 6px;
-          font-size: 12px;
-        }
-
-        .status-indicator {
-          font-size: 16px;
-          display: flex;
-          align-items: center;
-        }
-
-        .status-text {
-          font-weight: 500;
-        }
-
-        .ai-engine {
-          margin-left: 12px;
-          padding-left: 12px;
-          border-left: 1px solid #444;
-        }
-      `}</style>
     </div>
   );
 }

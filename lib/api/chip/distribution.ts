@@ -260,116 +260,76 @@ export async function fetchChipDistribution(
   params: ChipDistributionParams
 ): Promise<ApiResponse<ChipDistributionData>> {
   const { stockCode } = params;
-  let dataSource = 'Mock'; // 默认数据源
+  let dataSource = 'Local-API'; // 默认数据源
   
   try {
-    // 1. 优先检查是否处于Mock模式
-    if (process.env.NEXT_PUBLIC_API_MOCK === 'true') {
-      console.info('Mock mode enabled, using mock data directly');
-      dataSource = 'Mock';
-      return apiGet<ChipDistributionData>(
-        '/chip/distribution',
-        params,
-        { requiresAuth: false },
-        generateChipDistributionMock
-      );
-    }
+    // 1. 尝试调用本地后端API
+    console.info('Trying to fetch from local backend API');
+    const response = await apiGet<ChipDistributionData>(
+      '/chip/distribution',
+      params,
+      { requiresAuth: false }
+    );
     
-    // 2. 尝试调用本地后端API
-    try {
-      console.info('Trying to fetch from local backend API');
-      const response = await apiGet<ChipDistributionData>(
-        '/chip/distribution',
-        params,
-        { requiresAuth: false }
-      );
-      
-      if (response.code === 200) {
-        dataSource = 'Local-API';
-        // 增强响应，添加数据源标识
-        return {
-          ...response,
-          data: {
-            ...response.data,
-            _dataSource: dataSource
-          }
-        };
-      }
-    } catch (localApiError) {
-      console.warn('Local backend API failed, falling back to free scanner:', localApiError);
-      // 继续尝试下一级兜底
+    if (response.code === 200) {
+      dataSource = 'Local-API';
+      // 增强响应，添加数据源标识
+      return {
+        ...response,
+        data: {
+          ...response.data,
+          _dataSource: dataSource
+        }
+      };
     }
-    
-    // 3. 尝试从免费行情接口获取实时数据
-    let realtimeData: RealtimeStockData | undefined;
-    try {
-      console.info('Trying to fetch realtime data from free scanner');
-      realtimeData = await freeScanner.getRealtimeQuote(stockCode);
-      dataSource = 'Realtime-Tencent';
-    } catch (scannerError) {
-      console.warn('Free scanner failed, falling back to Tushare:', scannerError);
-      // 继续尝试下一级兜底
-    }
-    
-    // 4. 尝试从Tushare获取历史日线数据
-    try {
-      console.info('Trying to fetch historical data from Tushare');
-      const { startDate, endDate } = params;
-      
-      // 获取股票基本信息
-      const stockBasic = await getTushareStockBasic(stockCode);
-      
-      // 获取历史日线数据
-      const dailyData = await getTushareDailyData(stockCode, startDate, endDate);
-      
-      if (dailyData && dailyData.length > 0 && stockBasic) {
-        // 转换Tushare数据格式
-        const convertedData = convertTushareDailyToOHLCV(dailyData);
-        
-        // 使用WAD算法融合历史数据和实时价格
-        const chipDistributionData = simulateChipDistributionWithWAD(
-          convertedData, 
-          stockCode, 
-          stockBasic.name,
-          realtimeData // 传入实时数据
-        );
-        
-        // 返回融合后的数据，确保完整的ApiResponse格式
-        return {
-          code: 200,
-          msg: 'success',
-          data: {
-            ...chipDistributionData,
-            _dataSource: realtimeData ? 'Hybrid-Realtime-Tushare' : 'Baseline-Tushare'
-          },
-          requestId: `req-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`,
-          timestamp: Date.now()
-        };
-      }
-    } catch (tushareError) {
-      console.warn('Tushare failed, falling back to mock:', tushareError);
-      // 继续尝试最后一级兜底
-    }
-  } catch (error) {
-    console.error('All data sources failed:', error);
-    // 所有数据源都失败，最终回退到模拟数据
+  } catch (localApiError) {
+    console.warn('Local backend API failed, falling back to free scanner:', localApiError);
+    // 继续尝试下一级兜底
   }
   
-  // 5. 最终回退到模拟数据
-  console.info('All data sources failed, using mock data');
-  const mockResponse = await apiGet<ChipDistributionData>(
-    '/chip/distribution',
-    params,
-    { requiresAuth: false },
-    generateChipDistributionMock
-  );
-  
-  // 增强Mock响应，添加数据源标识
-  return {
-    ...mockResponse,
-    data: {
-      ...mockResponse.data,
-      _dataSource: 'Mock'
+  // 2. 使用FreeScanner获取实时数据，结合Tushare历史数据进行模拟计算
+  try {
+    console.info('Using FreeScanner + Tushare to simulate chip distribution');
+    
+    // 获取实时行情
+    let realtimeData: RealtimeStockData | undefined;
+    try {
+      realtimeData = await freeScanner.getRealtimeQuote(stockCode);
+    } catch (e) {
+      console.warn('Failed to fetch realtime data:', e);
     }
-  };
+    
+    // 获取历史K线数据（最近60天）
+    const endDate = formatDateTime(new Date());
+    const startDate = formatDateTime(new Date(Date.now() - 60 * 24 * 60 * 60 * 1000));
+    
+    // 注意：这里需要将日期格式转换为YYYYMMDD
+    const tushareStartDate = startDate.replace(/-/g, '');
+    const tushareEndDate = endDate.replace(/-/g, '');
+    
+    const dailyData = await getTushareDailyData(stockCode, tushareStartDate, tushareEndDate);
+    const stockBasic = await getTushareStockBasic(stockCode);
+    const stockName = stockBasic?.name || stockCode;
+    
+    // 转换Tushare数据格式
+    const convertedData = convertTushareDailyToOHLCV(dailyData);
+    
+    // 使用WAD算法模拟筹码分布
+    const chipData = simulateChipDistributionWithWAD(convertedData, stockCode, stockName, realtimeData);
+    dataSource = 'FreeScanner+WAD';
+    
+    return {
+      code: 200,
+      msg: 'success',
+      data: {
+        ...chipData,
+        _dataSource: dataSource
+      },
+      requestId: `req-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`,
+      timestamp: Date.now()
+    };
+  } catch (error) {
+    console.error('All real data sources failed:', error);
+    throw new ApiError(500, 'Failed to fetch chip distribution data from real sources');
+  }
 }

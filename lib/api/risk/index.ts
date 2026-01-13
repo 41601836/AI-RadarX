@@ -2,3 +2,4 @@
 
 export * from './riskaccountassessment';
 export * from './riskstopruleconfig';
+export * from './assessment';

@@ -2,6 +2,15 @@
 
 // Dashboard 组件
 import React, { useEffect, useState, useRef } from 'react';
+
+// 添加isMounted状态来解决Hydration警告
+const useIsMounted = () => {
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+  return isMounted;
+};
 import dynamic from 'next/dynamic';
 import WADChipDistribution from '../WADChipDistribution';
 import SearchComponent from '../SearchComponent';
@@ -23,22 +32,7 @@ import { formatNumberToFixed2, formatPercentToFixed2, formatNumberWithUnit } fro
 
 // 简单的Skeleton组件
 const Skeleton = () => (
-  <div className="skeleton">
-    <style jsx>{`
-      .skeleton {
-        background: #1e293b;
-        border-radius: 4px;
-        height: 200px;
-        width: 100%;
-        animation: pulse 1.5s infinite;
-      }
-      @keyframes pulse {
-        0% { opacity: 0.6; }
-        50% { opacity: 1; }
-        100% { opacity: 0.6; }
-      }
-    `}</style>
-  </div>
+  <div className="bg-slate-800 rounded-md h-50 w-full animate-pulse"></div>
 );
 
 // 动态导入组件
@@ -77,6 +71,9 @@ interface PositionStock {
 }
 
 const Dashboard: React.FC = () => {
+  // 使用isMounted钩子解决Hydration警告
+  const isMounted = useIsMounted();
+  
   const [alertData, setAlertData] = useState<HeatFlowAlertItem[]>([]);
   const [loadingAlerts, setLoadingAlerts] = useState(true);
   const [updatingData, setUpdatingData] = useState(false);
@@ -138,6 +135,7 @@ const Dashboard: React.FC = () => {
   
   // 模拟雷达图数据更新函数 - 提高安全概率，减少误报
   const updateRadarData = () => {
+    if (!isMounted) return;
     setRadarData(prevData => ({
       // 流动性：70%概率>60分（安全），30%概率<60分（警报）
       liquidity: Math.random() > 0.3 ? 60 + Math.random() * 40 : 20 + Math.random() * 40,
@@ -158,6 +156,7 @@ const Dashboard: React.FC = () => {
   
   // 模拟市场指数更新函数
   const updateMarketIndices = () => {
+    if (!isMounted) return;
     setMarketIndices(prevIndices => {
       // 创建新的指数数组
       return prevIndices.map((index, idx) => {
@@ -195,9 +194,12 @@ const Dashboard: React.FC = () => {
   
   // 计算分时强度
   const calculateIntradayStrength = () => {
-    if (!strengthCalculatorRef.current) {
+    if (!isMounted || !strengthCalculatorRef.current) {
       // 初始化强度计算器
-      strengthCalculatorRef.current = new RealTimeIntradayStrengthCalculator(10, true, true);
+      if (isMounted) {
+        strengthCalculatorRef.current = new RealTimeIntradayStrengthCalculator(10, true, true);
+      }
+      return;
     }
     
     const calculator = strengthCalculatorRef.current;
@@ -226,55 +228,59 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     // 初始加载数据
     fetchAlertData();
-    updateRadarData();
-    updateMarketIndices();
-    calculateIntradayStrength();
     
-    // 使用requestAnimationFrame优化数据更新
-    let lastUpdateTime = Date.now();
-    let animationFrameId: number;
-    
-    const updateData = () => {
-      const now = Date.now();
-      // 控制刷新频率为15秒
-      if (now - lastUpdateTime >= 15000) {
-        // 异步执行数据更新，避免阻塞UI线程
-        Promise.all([
-          fetchAlertData(),
-          Promise.resolve().then(updateRadarData),
-          Promise.resolve().then(updateMarketIndices),
-          Promise.resolve().then(calculateIntradayStrength)
-        ]);
-        lastUpdateTime = now;
-      }
-      // 继续请求下一帧
+    // 只有在客户端挂载后才执行随机计算
+    if (isMounted) {
+      updateRadarData();
+      updateMarketIndices();
+      calculateIntradayStrength();
+      
+      // 使用requestAnimationFrame优化数据更新
+      let lastUpdateTime = Date.now();
+      let animationFrameId: number;
+      
+      const updateData = () => {
+        const now = Date.now();
+        // 控制刷新频率为15秒
+        if (now - lastUpdateTime >= 15000) {
+          // 异步执行数据更新，避免阻塞UI线程
+          Promise.all([
+            fetchAlertData(),
+            Promise.resolve().then(updateRadarData),
+            Promise.resolve().then(updateMarketIndices),
+            Promise.resolve().then(calculateIntradayStrength)
+          ]);
+          lastUpdateTime = now;
+        }
+        // 继续请求下一帧
+        animationFrameId = requestAnimationFrame(updateData);
+      };
+      
+      // 启动动画循环
       animationFrameId = requestAnimationFrame(updateData);
-    };
-    
-    // 启动动画循环
-    animationFrameId = requestAnimationFrame(updateData);
-    
-    // 组件卸载时清除动画帧
-    return () => {
-      cancelAnimationFrame(animationFrameId);
-    };
-  }, [currentTicker]);
+      
+      // 组件卸载时清除动画帧
+      return () => {
+        cancelAnimationFrame(animationFrameId);
+      };
+    }
+  }, [currentTicker, isMounted]);
 
   return (
-    <div className="dashboard">
+    <div className="h-screen overflow-hidden flex flex-col bg-black text-white relative">
       {/* 四栏布局：左侧市场状态、中间主内容、右侧雷达面板、最右侧情报简报 */}
-      <div className="dashboard-main four-column-layout">
+      <div className="grid grid-cols-[1.5fr,2.5fr,5fr,3fr] h-full overflow-hidden relative">
         {/* 左侧F1: MARKET_STATUS面板 */}
-        <aside className="dashboard-market-status">
+        <aside className="border-r border-gray-700 p-4 overflow-y-auto bg-black h-full relative">
           <MarketScanner />
         </aside>
 
         {/* 左侧主内容 */}
-        <main className="dashboard-content">
-          <div className="content-grid">
+        <main className="overflow-hidden flex flex-col p-4 h-full relative">
+          <div className="grid grid-cols-2 grid-rows-3 gap-4 h-full overflow-hidden">
             {/* 左上角：市场概览 */}
-            <div className="panel market-overview">
-              <h2>市场概览</h2>
+            <div className="bg-black border border-gray-700 p-4 overflow-auto flex flex-col">
+              <h2 className="text-yellow-500">市场概览</h2>
               <div className="market-stats">
                 {marketIndices.map((index, idx) => (
                   <div key={idx} className="stat-card">
@@ -289,8 +295,8 @@ const Dashboard: React.FC = () => {
             </div>
 
             {/* 右上角：我的持仓 */}
-            <div className="panel portfolio">
-              <h2>我的持仓</h2>
+            <div className="bg-black border border-gray-700 p-4 overflow-auto flex flex-col">
+              <h2 className="text-yellow-500">我的持仓</h2>
               <div className="portfolio-info">
                 <div className="portfolio-stat">
                   <span className="stat-label">总市值</span>
@@ -316,16 +322,16 @@ const Dashboard: React.FC = () => {
             </div>
 
             {/* 左下角：筹码分布监控 */}
-            <div className="panel wad-chip-monitor">
-              <h2>筹码分布监控</h2>
+            <div className="bg-black border border-gray-700 p-4 overflow-auto flex flex-col">
+              <h2 className="text-yellow-500">筹码分布监控</h2>
               <WADChipDistribution 
                 symbol={currentTicker?.ts_code || "SH600000"} 
               />
             </div>
 
             {/* 右下角：分时强度分析 */}
-            <div className="panel intraday-strength">
-              <h2>分时强度分析</h2>
+            <div className="bg-black border border-gray-700 p-4 overflow-auto flex flex-col">
+              <h2 className="text-yellow-500">分时强度分析</h2>
               {intradayAnalysisResult ? (
                 <div className="intraday-analysis">
                   <div className="analysis-header">
@@ -353,12 +359,12 @@ const Dashboard: React.FC = () => {
             </div>
 
             {/* 底部：热流警报 */}
-            <div className="panel heat-flow-alerts">
-              <h2>热流警报</h2>
+            <div className="bg-black border border-gray-700 p-4 overflow-auto flex flex-col col-span-2">
+              <h2 className="text-yellow-500">热流警报</h2>
               <div className="alerts-list">
                 {alertData.map((alert, idx) => (
                   <div key={idx} className="alert-item">
-                    <span className="alert-time">{new Date(alert.alertTime).toLocaleTimeString()}</span>
+                    <span className="alert-time">{isMounted ? new Date(alert.alertTime).toLocaleTimeString() : ''}</span>
                     <span className="alert-content">{alert.alertDesc}</span>
                   </div>
                 ))}
@@ -368,18 +374,20 @@ const Dashboard: React.FC = () => {
         </main>
 
         {/* 右侧雷达面板 */}
-        <div className="dashboard-radar-panel">
+        <div className="border-l border-gray-700 p-4 overflow-y-auto bg-black h-full relative">
           <ARadarPanel />
-          <SmartThresholdRadar 
-            stockCode={currentTicker?.ts_code || "SH600000"}
-            marketData={{ volumeRatio: Math.random() * 1.5 }} 
-            largeOrderData={{ sellPressure: Math.random() }} 
-            publicOpinion={{ sentimentScore: Math.random() * 100 }} 
-          />
+          {isMounted && (
+            <SmartThresholdRadar 
+              stockCode={currentTicker?.ts_code || "SH600000"}
+              marketData={{ volumeRatio: Math.random() * 1.5 }} 
+              largeOrderData={{ sellPressure: Math.random() }} 
+              publicOpinion={{ sentimentScore: Math.random() * 100 }} 
+            />
+          )}
         </div>
 
         {/* 最右侧AI选股情报简报侧边栏 */}
-        <aside className="dashboard-sidebar">
+        <aside className="border-l border-gray-700 p-4 overflow-y-auto bg-black h-full relative">
           <IntelligenceBrief 
             alertStatus={{ 
               isAlert: radarData.liquidity < 60 || radarData.sellingPressure > 70, 
@@ -389,107 +397,7 @@ const Dashboard: React.FC = () => {
         </aside>
       </div>
 
-      <style jsx>{`
-        /* Dashboard 基础样式 */
-        .dashboard {
-          height: 100vh;
-          overflow: hidden;
-          display: flex;
-          flex-direction: column;
-          background: #000;
-          color: #ffffff;
-          position: relative;
-        }
 
-        /* 主容器 */
-        .dashboard-main {
-          display: grid;
-          grid-template-columns: 1.5fr 2.5fr 5fr 3fr;
-          grid-template-rows: 1fr;
-          height: 100%;
-          overflow: hidden;
-          position: relative;
-        }
-
-        /* 左侧市场状态面板 */
-        .dashboard-market-status {
-          border-right: 1px solid #333;
-          padding: 16px;
-          overflow-y: auto;
-          background: #000;
-          height: 100%;
-          position: relative;
-        }
-
-        /* 左侧主内容 */
-        .dashboard-content {
-          overflow: hidden;
-          display: flex;
-          flex-direction: column;
-          padding: 16px;
-          height: 100%;
-          position: relative;
-        }
-
-        /* 内容网格布局 */
-        .content-grid {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          grid-template-rows: repeat(3, 1fr);
-          gap: 16px;
-          height: 100%;
-          overflow: hidden;
-        }
-
-        /* 面板基础样式 */
-        .panel {
-          background: #000;
-          border: 1px solid #333;
-          padding: 16px;
-          overflow: auto;
-          display: flex;
-          flex-direction: column;
-        }
-        
-        /* 面板标题样式 */
-        .panel h2, .panel h3 {
-          color: #FFD700;
-        }
-
-        /* 特定面板样式 */
-        .market-overview, .portfolio {
-          grid-row: span 1;
-        }
-
-        .wad-chip-monitor, .intraday-strength {
-          grid-row: span 1;
-        }
-
-        .heat-flow-alerts {
-          grid-row: span 1;
-          grid-column: span 2;
-        }
-
-        /* 右侧雷达面板 */
-        .dashboard-radar-panel {
-          border-left: 1px solid #333;
-          padding: 16px;
-          overflow-y: auto;
-          background: #000;
-          height: 100%;
-          position: relative;
-        }
-
-        /* 最右侧情报流 */
-        .dashboard-sidebar {
-          border-left: 1px solid #333;
-          padding: 16px;
-          overflow-y: auto;
-          background: #000;
-          height: 100%;
-          position: relative;
-        }
-      `}</style>
     </div>
   );
 };

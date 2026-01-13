@@ -3,6 +3,8 @@
 
 import React, { ReactNode, Component, ErrorInfo } from 'react';
 import { ErrorCode } from '../lib/api/common/errors';
+import { logger } from '../lib/utils/logger';
+import { resetZustandStores } from '../lib/components/EnvironmentControl';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -42,8 +44,9 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    // 可以在此处记录错误日志
-    console.error(`${this.props.moduleName || '模块'}发生错误:`, error, errorInfo);
+    // 使用全局日志工具记录错误
+    const moduleName = this.props.moduleName || '模块';
+    logger.error(`${moduleName}发生错误`, { error, errorInfo });
   }
 
   handleRetry = () => {
@@ -54,6 +57,52 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
       errorCode: undefined,
       errorMessage: undefined
     });
+  };
+
+  handleSystemRestart = () => {
+    // 执行系统自动重启
+    logger.info('执行系统自动重启');
+    // 重置状态
+    this.setState({
+      hasError: false,
+      error: null,
+      errorCode: undefined,
+      errorMessage: undefined
+    });
+    // 清理Zustand缓存并重新初始化Store
+    resetZustandStores();
+    // 刷新页面
+    window.location.reload();
+  };
+
+  handleExportLog = () => {
+    // 导出崩溃日志
+    const { error, errorMessage, errorCode } = this.state;
+    const logData = {
+      timestamp: new Date().toISOString(),
+      moduleName: this.props.moduleName || '未知模块',
+      errorCode,
+      errorMessage,
+      error: error ? {
+        message: error.message,
+        stack: error.stack
+      } : null,
+      userAgent: navigator.userAgent,
+      url: window.location.href
+    };
+
+    const logJson = JSON.stringify(logData, null, 2);
+    const blob = new Blob([logJson], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `crash-log-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    logger.info('崩溃日志已导出');
   };
 
   render() {
@@ -99,6 +148,12 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
             <div className="error-actions">
               <button onClick={this.handleRetry} className="retry-button">
                 重试
+              </button>
+              <button onClick={this.handleSystemRestart} className="restart-button">
+                一键重置缓存并重启
+              </button>
+              <button onClick={this.handleExportLog} className="export-button">
+                导出崩溃日志
               </button>
             </div>
           </div>
@@ -161,6 +216,8 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
             .error-actions {
               display: flex;
               justify-content: flex-end;
+              gap: 8px;
+              flex-wrap: wrap;
             }
 
             .retry-button {
@@ -177,6 +234,38 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
 
             .retry-button:hover {
               background: #b4f9f8;
+            }
+
+            .restart-button {
+              background: #a6e3a1;
+              color: #1e1e2e;
+              border: none;
+              border-radius: 4px;
+              padding: 8px 16px;
+              font-size: 14px;
+              font-weight: 500;
+              cursor: pointer;
+              transition: background-color 0.2s;
+            }
+
+            .restart-button:hover {
+              background: #dcfce7;
+            }
+
+            .export-button {
+              background: #f5c2e7;
+              color: #1e1e2e;
+              border: none;
+              border-radius: 4px;
+              padding: 8px 16px;
+              font-size: 14px;
+              font-weight: 500;
+              cursor: pointer;
+              transition: background-color 0.2s;
+            }
+
+            .export-button:hover {
+              background: #fbcfe8;
             }
           `}</style>
         </div>

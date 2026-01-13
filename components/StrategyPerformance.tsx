@@ -179,7 +179,7 @@ export default function StrategyPerformance({ backtestResult, loading }: Strateg
               <span>交易次数</span>
               <span>胜率</span>
             </div>
-            <div className="table-row">
+            <div className="table-row even">
               <span>¥{(backtestResult.initialCapital / 100).toFixed(2)}</span>
               <span>¥{(backtestResult.finalCapital / 100).toFixed(2)}</span>
               <span>{backtestResult.tradeRecords.length}</span>
@@ -236,7 +236,7 @@ export default function StrategyPerformance({ backtestResult, loading }: Strateg
         }
 
         .metric-item {
-          background: #2a2a3a;
+          background: rgba(42, 42, 58, 0.5);
           border-radius: 4px;
           padding: 12px;
           text-align: center;
@@ -253,14 +253,17 @@ export default function StrategyPerformance({ backtestResult, loading }: Strateg
           display: block;
           font-size: 18px;
           font-weight: bold;
+          font-family: 'Courier New', monospace;
         }
 
         .metric-value.positive {
-          color: #a6e3a1;
+          color: #10b981;
+          text-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
         }
 
         .metric-value.negative {
-          color: #f38ba8;
+          color: #ef4444;
+          text-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
         }
 
         .performance-chart-container, .performance-details {
@@ -271,18 +274,20 @@ export default function StrategyPerformance({ backtestResult, loading }: Strateg
           margin: 0 0 12px 0;
           font-size: 14px;
           color: #c4a7e7;
+          padding-bottom: 6px;
+          border-bottom: 1px solid #ffffff/10;
         }
 
         .performance-chart, .details-table {
-          background: #2a2a3a;
+          background: rgba(42, 42, 58, 0.3);
           border-radius: 4px;
-          padding: 12px;
+          padding: 16px;
         }
 
         .chart-header {
           display: flex;
           justify-content: space-between;
-          margin-bottom: 12px;
+          margin-bottom: 16px;
           font-size: 12px;
           color: #94a3b8;
         }
@@ -295,13 +300,22 @@ export default function StrategyPerformance({ backtestResult, loading }: Strateg
         .details-table {
           display: flex;
           flex-direction: column;
+          gap: 8px;
         }
 
         .table-row {
-          display: flex;
-          justify-content: space-between;
-          padding: 8px 0;
-          border-bottom: 1px solid #3a3a4a;
+          display: grid;
+          grid-template-columns: 1fr 1fr 1fr 1fr;
+          gap: 12px;
+          padding: 10px 0;
+        }
+
+        .table-row > span {
+          text-align: right;
+        }
+
+        .table-row > span:first-child {
+          text-align: left;
         }
 
         .table-row.header {
@@ -309,8 +323,9 @@ export default function StrategyPerformance({ backtestResult, loading }: Strateg
           color: #c4a7e7;
         }
 
-        .table-row:last-child {
-          border-bottom: none;
+        .table-row.even {
+          background: white/[0.02];
+          border-radius: 4px;
         }
 
         .empty-state {

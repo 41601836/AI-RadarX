@@ -17,9 +17,12 @@ import {
 import {
   calculateDTW as calculateBasicDTW,
   calculateAdvancedDTW,
-  recognizeAdvancedKlinePatterns as recognizeKlinePatterns,
-  KlinePatternRecognitionService
+  recognizeKlinePatterns,
+  EnhancedKlinePatternRecognitionService
 } from './lib/algorithms/technicalIndicators';
+
+// 为了兼容旧代码，重新导出calculateDTW
+const calculateDTW = calculateBasicDTW;
 
 import { calculateChipConcentration } from './lib/algorithms/chipDistribution';
 
@@ -93,7 +96,7 @@ function testLargeOrderDetection() {
   ];
   
   // 创建Flink风格的订单流处理器
-  const processor = new FlinkStyleOrderStreamProcessor(windowConfigs, 2);
+  const processor = new FlinkStyleOrderStreamProcessor(windowConfigs, { n: 2 });
   
   // 生成测试订单数据
   const testOrders: OrderItem[] = [
@@ -140,21 +143,24 @@ function testDTWSequenceMatching() {
   const sequence2 = Array.from({ length: 60 }, (_, i) => Math.sin(i * 0.2 + 0.1) + Math.random() * 0.1);
   
   // 测试不同距离度量
-  const distanceMetrics = ['euclidean', 'manhattan', 'chebyshev'] as const;
+  const distanceMetrics = ['euclidean', 'manhattan'] as const;
   const normalizationMethods = ['none', 'minmax', 'zscore'] as const;
   
   console.log('DTW距离计算测试:');
   distanceMetrics.forEach(metric => {
     normalizationMethods.forEach(norm => {
-      const result = calculateDTW({
-        sequence1,
-        sequence2,
-        windowSize: 10,
+      const distance = calculateAdvancedDTW({
+        series1: sequence1,
+        series2: sequence2,
+        windowSize: 20,
         normalization: norm,
         distanceMetric: metric
       });
       
-      console.log(`  ${metric}距离, ${norm}归一化: 距离 = ${result.distance.toFixed(4)}, 相似度 = ${(result.similarity * 100).toFixed(2)}%, 计算时间 = ${result.computationTime}ms`);
+      // 计算相似度（基于距离的倒数）
+      const similarity = 1 / (1 + distance);
+      
+      console.log(`  ${metric}距离, ${norm}归一化: 距离 = ${distance.toFixed(4)}, 相似度 = ${(similarity * 100).toFixed(2)}%`);
     });
   });
   
@@ -185,40 +191,31 @@ async function testCNNModel() {
   const klineData = generateKlineData(100, 100);
   
   // 测试K线形态识别服务
-  const cnnService = new KlinePatternRecognitionService({
-    inputShape: [30, 5, 1],
-    modelType: 'cnn',
-    useGPU: false
-  });
+  const cnnService = new EnhancedKlinePatternRecognitionService(true, true);
   
-  const cnnResults = await cnnService.recognizePatterns(klineData, { sequenceLength: 30 });
+  const cnnResults = await cnnService.recognizePatterns(klineData);
   
   console.log('CNN模型识别结果:');
   cnnResults.forEach((result, index) => {
-    console.log(`  形态${index + 1}: ${result.pattern} (置信度: ${(result.confidence * 100).toFixed(2)}%)`);
-    if (result.patternDetails) {
-      console.log(`    区间: ${result.patternDetails.startIndex}-${result.patternDetails.endIndex}, 形状: ${result.patternDetails.shape}`);
-      console.log(`    潜在移动: ${(result.patternDetails.potentialMove * 100).toFixed(2)}%, 历史准确率: ${(result.patternDetails.historicalAccuracy * 100).toFixed(2)}%`);
-    }
+    console.log(`  形态${index + 1}: ${result.name} (置信度: ${(result.confidence * 100).toFixed(2)}%)`);
+    console.log(`    类型: ${result.type}, 区间: ${result.startIndex}-${result.endIndex}`);
   });
   
   // 测试组合识别（CNN + DTW）
   console.log('\n组合识别（CNN + DTW）测试:');
-  const combinedResults = await recognizeKlinePatterns(klineData, {
-    sequenceLength: 30,
-    useCNN: true,
-    useDTW: true
+  const combinedResults = recognizeKlinePatterns({
+    high: klineData.map(d => d.high),
+    low: klineData.map(d => d.low),
+    close: klineData.map(d => d.close),
+    open: klineData.map(d => d.open)
   });
   
-  if (combinedResults.combinedResult) {
-    console.log(`  主导形态: ${combinedResults.combinedResult.dominantPattern} (综合置信度: ${(combinedResults.combinedResult.confidence * 100).toFixed(2)}%)`);
-    combinedResults.combinedResult.patterns.forEach(pattern => {
-      console.log(`    ${pattern.type.toUpperCase()}: ${pattern.pattern} (置信度: ${(pattern.confidence * 100).toFixed(2)}%)`);
-    });
-  }
+  console.log(`  识别到${combinedResults.length}种形态:`);
+  combinedResults.slice(0, 3).forEach((pattern, index) => {
+    console.log(`    ${index + 1}. ${pattern.name} (${pattern.type}) - 置信度: ${(pattern.confidence * 100).toFixed(2)}%`);
+  });
   
-  // 释放资源
-  cnnService.dispose();
+  // 释放资源 - EnhancedKlinePatternRecognitionService 不需要显式 dispose
   
   console.log('\nCNN模型接入层和K线形态识别测试完成!');
 }

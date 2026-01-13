@@ -190,17 +190,17 @@ const ARadarPanel: React.FC = () => {
   });
 
   return (
-    <div className="a-radar-panel panel">
+    <div className="flex flex-col gap-4 p-5 bg-slate-900/80 rounded-lg max-w-4xl mx-auto border border-slate-700">
       {/* 雷达类型切换按钮 */}
-      <div className="radar-type-switcher">
+      <div className="flex gap-3 justify-center">
         <button 
-          className={`radar-switch-btn ${radarType === 'emotion' ? 'active' : ''}`}
+          className={`px-5 py-2 bg-slate-800/60 rounded-md cursor-pointer transition-all duration-300 ${radarType === 'emotion' ? 'bg-cyan-900/30 text-cyan-300' : 'text-slate-400 hover:bg-cyan-900/20 hover:text-cyan-300'}`}
           onClick={() => setRadarType('emotion')}
         >
           情绪雷达
         </button>
         <button 
-          className={`radar-switch-btn ${radarType === 'stock' ? 'active' : ''}`}
+          className={`px-5 py-2 bg-slate-800/60 rounded-md cursor-pointer transition-all duration-300 ${radarType === 'stock' ? 'bg-cyan-900/30 text-cyan-300' : 'text-slate-400 hover:bg-cyan-900/20 hover:text-cyan-300'}`}
           onClick={() => setRadarType('stock')}
         >
           个股雷达
@@ -208,9 +208,9 @@ const ARadarPanel: React.FC = () => {
       </div>
       
       {/* 雷达图显示区域 */}
-      <div className="radar-content">
-        <h3>{radarType === 'emotion' ? '市场情绪雷达' : '个股表现雷达'}</h3>
-        <div className="radar-chart-container">
+      <div className="flex flex-col items-center gap-4">
+        <h3 className="text-purple-300 text-xl">{radarType === 'emotion' ? '市场情绪雷达' : '个股表现雷达'}</h3>
+        <div className="w-full max-w-3xl aspect-square flex justify-center items-center">
           {radarType === 'emotion' ? (
             <SmartThresholdRadar data={{
               '流动性': currentEmotionData.liquidity,
@@ -234,29 +234,31 @@ const ARadarPanel: React.FC = () => {
       </div>
       
       {/* 雷达图数据说明 */}
-      <div className="radar-data-info">
-        <h4>数据说明</h4>
+      <div className="bg-slate-800/40 p-5 rounded-lg border border-slate-700">
+        <h4 className="text-slate-400 text-sm mb-4 uppercase tracking-wider">数据说明</h4>
         {radarType === 'emotion' ? (
-          <ul className="data-description">
-            <li>流动性: {currentEmotionData.liquidity.toFixed(1)}分</li>
-            <li>抛压: {currentEmotionData.sellingPressure.toFixed(1)}分</li>
-            <li>情绪: {currentEmotionData.sentiment.toFixed(1)}分</li>
-            <li>量能强度: {currentEmotionData.volumePower.toFixed(1)}分</li>
-            <li>趋势强度: {currentEmotionData.trendStrength.toFixed(1)}分</li>
-            <li>筹码集中度: {currentEmotionData.chipConcentration.toFixed(1)}分</li>
+          <ul className="space-y-2 list-none p-0 m-0">
+            <li className="flex justify-between p-3 rounded-md transition-all duration-300 hover:bg-slate-700/30" data-label="流动性" data-value={`${currentEmotionData.liquidity.toFixed(1)}分`}></li>
+            <li className="flex justify-between p-3 rounded-md transition-all duration-300 hover:bg-slate-700/30" data-label="抛压" data-value={`${currentEmotionData.sellingPressure.toFixed(1)}分`}></li>
+            <li className="flex justify-between p-3 rounded-md transition-all duration-300 hover:bg-slate-700/30" data-label="情绪" data-value={`${currentEmotionData.sentiment.toFixed(1)}分`}></li>
+            <li className="flex justify-between p-3 rounded-md transition-all duration-300 hover:bg-slate-700/30" data-label="量能强度" data-value={`${currentEmotionData.volumePower.toFixed(1)}分`}></li>
+            <li className="flex justify-between p-3 rounded-md transition-all duration-300 hover:bg-slate-700/30" data-label="趋势强度" data-value={`${currentEmotionData.trendStrength.toFixed(1)}分`}></li>
+            <li className="flex justify-between p-3 rounded-md transition-all duration-300 hover:bg-slate-700/30" data-label="筹码集中度" data-value={`${currentEmotionData.chipConcentration.toFixed(1)}分`}></li>
           </ul>
         ) : (
-          <ul className="data-description">
-            <li>分时量比: {currentStockData.volumeStrength.toFixed(1)}%</li>
-            <li>换手变动: {currentEmotionData.liquidity.toFixed(1)}分</li>
-            <li>卖压强度: {currentEmotionData.sellingPressure.toFixed(1)}分</li>
-            <li>趋势强度: {currentStockData.trendStrength.toFixed(1)}%</li>
-            <li>资金强度: {currentStockData.fundStrength.toFixed(1)}%</li>
-            <li>消息强度: {currentStockData.newsStrength.toFixed(1)}%</li>
+          <ul className="space-y-2 list-none p-0 m-0">
+            <li className="flex justify-between p-3 rounded-md transition-all duration-300 hover:bg-slate-700/30" data-label="分时量比" data-value={`${currentStockData.volumeStrength.toFixed(1)}%`}></li>
+            <li className="flex justify-between p-3 rounded-md transition-all duration-300 hover:bg-slate-700/30" data-label="换手变动" data-value={`${currentEmotionData.liquidity.toFixed(1)}分`}></li>
+            <li className="flex justify-between p-3 rounded-md transition-all duration-300 hover:bg-slate-700/30" data-label="卖压强度" data-value={`${currentEmotionData.sellingPressure.toFixed(1)}分`}></li>
+            <li className="flex justify-between p-3 rounded-md transition-all duration-300 hover:bg-slate-700/30" data-label="趋势强度" data-value={`${currentStockData.trendStrength.toFixed(1)}%`}></li>
+            <li className="flex justify-between p-3 rounded-md transition-all duration-300 hover:bg-slate-700/30" data-label="资金强度" data-value={`${currentStockData.fundStrength.toFixed(1)}%`}></li>
+            <li className="flex justify-between p-3 rounded-md transition-all duration-300 hover:bg-slate-700/30" data-label="消息强度" data-value={`${currentStockData.newsStrength.toFixed(1)}%`}></li>
           </ul>
         )}
       </div>
     </div>
+
+
   );
 };
 
