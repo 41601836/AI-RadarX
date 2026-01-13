@@ -61,7 +61,7 @@ export async function fetchTechKlinePatternRecognize(
       console.info('Mock mode enabled, using mock data directly');
       dataSource = 'Mock';
       return apiGet<TechKlinePatternData>(
-        '/tech/kline/pattern/recognize',
+        '/v1/tech/kline/pattern/recognize',
         params,
         { requiresAuth: false },
         generateTechKlinePatternRecognizeMock
@@ -72,7 +72,7 @@ export async function fetchTechKlinePatternRecognize(
     try {
       console.info('Trying to fetch from local backend API');
       const response = await apiGet<TechKlinePatternData>(
-        '/tech/kline/pattern/recognize',
+        '/v1/tech/kline/pattern/recognize',
         params,
         { requiresAuth: false }
       );
@@ -93,7 +93,7 @@ export async function fetchTechKlinePatternRecognize(
   // 最终回退到模拟数据
   console.info('All data sources failed, using mock data');
   const mockResponse = await apiGet<TechKlinePatternData>(
-    '/tech/kline/pattern/recognize',
+    '/v1/tech/kline/pattern/recognize',
     params,
     { requiresAuth: false },
     generateTechKlinePatternRecognizeMock

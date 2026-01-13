@@ -14,7 +14,11 @@ import PublicOpinionList from '../PublicOpinionList';
 import RiskAssessment from '../RiskAssessment';
 import TechIndicatorPanel from '../TechIndicatorPanel';
 import MarketSentimentDashboard from '../MarketSentimentDashboard';
-import HeatFlowMonitor from '../HeatFlowMonitor';
+// 使用动态导入解决水合错误
+const HeatFlowMonitor = dynamic(() => import('../HeatFlowMonitor'), {
+  loading: () => <div className="panel loading"><div className="loading-spinner"></div><p>加载中...</p></div>,
+  ssr: false
+});
 import { fetchHeatFlowAlertList, HeatFlowAlertItem } from '../../lib/api/heatFlow/alert';
 import { StockBasicInfo } from '../../lib/api/market';
 import { useStockContext } from '../../lib/context/StockContext';

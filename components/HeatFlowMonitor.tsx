@@ -1,7 +1,7 @@
 // 热钱流向监控组件
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { fetchHeatFlowAlertList, HeatFlowAlertParams, HeatFlowAlertItem } from '../lib/api/heatFlow/alert';
 import { usePolling } from '../lib/hooks/usePolling';
 import { formatDateTime } from '../lib/api/common/utils';
@@ -17,7 +17,10 @@ export default function HeatFlowMonitor({
   initialPageNum = 1,
   initialPageSize = 10 
 }: HeatFlowMonitorProps) {
-  // 状态管理
+  // 使用useRef来确保状态在客户端首次渲染时初始化
+  const isClient = useRef(false);
+  
+  // 状态管理 - 确保服务器端和客户端的初始状态一致
   const [alerts, setAlerts] = useState<HeatFlowAlertItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -29,8 +32,16 @@ export default function HeatFlowMonitor({
   const [pageNum, setPageNum] = useState(initialPageNum);
   const [pageSize, setPageSize] = useState(initialPageSize);
   
+  // 在客户端首次渲染时设置isClient为true
+  useEffect(() => {
+    isClient.current = true;
+  }, []);
+  
   // 获取预警数据
   const fetchData = useCallback(async () => {
+    // 只在客户端运行
+    if (!isClient.current) return;
+    
     try {
       setLoading(true);
       setError(null);
@@ -58,9 +69,12 @@ export default function HeatFlowMonitor({
     }
   }, [alertLevel, pageNum, pageSize]);
   
-  // 初始加载数据
+  // 初始加载数据 - 只在客户端运行
   useEffect(() => {
-    fetchData();
+    // 确保只在客户端运行，避免水合错误
+    if (isClient.current) {
+      fetchData();
+    }
   }, [fetchData]);
   
   // 使用全局轮询钩子，当不在仪表盘页面时自动停止

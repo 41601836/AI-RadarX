@@ -59,7 +59,7 @@ export async function fetchRiskAccountAssessment(
       console.info('Mock mode enabled, using mock data directly');
       dataSource = 'Mock';
       return apiGet<RiskAccountAssessmentData>(
-        '/risk/account/assessment',
+        '/v1/risk/account/assessment',
         params,
         { requiresAuth: false },
         generateRiskAccountAssessmentMock
@@ -70,7 +70,7 @@ export async function fetchRiskAccountAssessment(
     try {
       console.info('Trying to fetch from local backend API');
       const response = await apiGet<RiskAccountAssessmentData>(
-        '/risk/account/assessment',
+        '/v1/risk/account/assessment',
         params,
         { requiresAuth: false }
       );
@@ -91,7 +91,7 @@ export async function fetchRiskAccountAssessment(
   // 最终回退到模拟数据
   console.info('All data sources failed, using mock data');
   const mockResponse = await apiGet<RiskAccountAssessmentData>(
-    '/risk/account/assessment',
+    '/v1/risk/account/assessment',
     params,
     { requiresAuth: false },
     generateRiskAccountAssessmentMock

@@ -159,7 +159,7 @@ export async function fetchTechIndicatorData(
       console.info('Mock mode enabled, using mock data directly');
       dataSource = 'Mock';
       return apiGet<TechIndicatorData>(
-        '/tech/indicator/data',
+        '/v1/tech/indicator/data',
         params,
         { requiresAuth: false },
         generateTechIndicatorDataMock
@@ -170,7 +170,7 @@ export async function fetchTechIndicatorData(
     try {
       console.info('Trying to fetch from local backend API');
       const response = await apiGet<TechIndicatorData>(
-        '/tech/indicator/data',
+        '/v1/tech/indicator/data',
         params,
         { requiresAuth: false }
       );
@@ -191,7 +191,7 @@ export async function fetchTechIndicatorData(
   // 最终回退到模拟数据
   console.info('All data sources failed, using mock data');
   const mockResponse = await apiGet<TechIndicatorData>(
-    '/tech/indicator/data',
+    '/v1/tech/indicator/data',
     params,
     { requiresAuth: false },
     generateTechIndicatorDataMock

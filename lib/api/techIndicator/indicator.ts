@@ -60,5 +60,5 @@ export async function fetchTechIndicatorData(
   if (!params.stockCode || !/^(SH|SZ)\d{6}$/.test(params.stockCode)) {
     throw stockCodeFormatError();
   }
-  return apiGet<TechIndicatorData>('/tech-indicator/data', params);
+  return apiGet<TechIndicatorData>('/v1/tech/indicator/data', params);
 }
