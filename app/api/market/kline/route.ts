@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { apiHandler } from '../../../../lib/api/common/handler';
+import { successResponse } from '../../../../lib/api/common/response';
 
 // 生成模拟K线数据
 function generateMockKLineData() {
@@ -36,8 +37,8 @@ async function handleKLineRequest(request: NextRequest) {
     // 生成模拟数据
     const mockData = generateMockKLineData();
     
-    // 返回成功响应
-    return mockData;
+    // 返回成功响应，使用标准的ApiResponse格式
+    return successResponse(mockData);
   } catch (error) {
     console.error('Error handling K-line request:', error);
     return {

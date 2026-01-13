@@ -143,10 +143,10 @@ const MarketSentimentDashboard: React.FC = () => {
         }
 
         .index-card {
-          background: #111;
-          border: 1px solid #333;
+          background: rgba(255, 255, 255, 0.03);
           padding: 16px;
           text-align: center;
+          border-radius: 8px;
         }
 
         .index-name {
@@ -190,11 +190,11 @@ const MarketSentimentDashboard: React.FC = () => {
         }
 
         .sentiment-gauge-container {
-          background: #111;
-          border: 1px solid #333;
+          background: rgba(255, 255, 255, 0.03);
           padding: 16px;
           text-align: center;
           flex: 1;
+          border-radius: 8px;
         }
 
         .sentiment-gauge {
@@ -208,11 +208,11 @@ const MarketSentimentDashboard: React.FC = () => {
         }
 
         .market-breadth-container {
-          background: #111;
-          border: 1px solid #333;
+          background: rgba(255, 255, 255, 0.03);
           padding: 16px;
           text-align: center;
           flex: 1;
+          border-radius: 8px;
         }
 
         .market-breadth-histogram {
@@ -226,13 +226,13 @@ const MarketSentimentDashboard: React.FC = () => {
         }
 
         .north-capital-container {
-          background: #111;
-          border: 1px solid #333;
+          background: rgba(255, 255, 255, 0.03);
           padding: 16px;
           text-align: center;
           flex: 1;
           display: flex;
           flex-direction: column;
+          border-radius: 8px;
         }
 
         .north-capital-value {

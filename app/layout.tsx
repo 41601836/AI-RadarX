@@ -2,6 +2,7 @@
 import type { Metadata } from 'next' 
 import { StockProvider } from '../lib/context/StockContext'
 import { NotificationProvider } from '../components/NotificationCenter'
+import MainLayout from '../components/layout/MainLayout'
 import './globals.css' // 引入全局CSS样式重置
 
 export const metadata: Metadata = {
@@ -19,7 +20,9 @@ export default function RootLayout({
       <body>
         <NotificationProvider>
           <StockProvider>
-            {children}
+            <MainLayout>
+              {children}
+            </MainLayout>
           </StockProvider>
         </NotificationProvider>
       </body>

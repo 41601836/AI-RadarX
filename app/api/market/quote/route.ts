@@ -3,7 +3,7 @@ import { errorResponse, badRequestError } from '../../../../lib/api/common/error
 import { apiHandler } from '../../../../lib/api/common/handler';
 
 // 腾讯财经API基础URL
-const TENCENT_FINANCE_URL = 'http://qt.gtimg.cn/q=';
+const TENCENT_FINANCE_URL = 'https://qt.gtimg.cn/q=';
 
 /**
  * 处理股票行情请求

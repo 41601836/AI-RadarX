@@ -33,8 +33,8 @@ async function handleStockBasicRequest(request: NextRequest) {
     // 生成模拟数据
     const mockData = generateMockStockBasicList();
     
-    // 返回成功响应
-    return mockData;
+    // 返回成功响应，使用标准的ApiResponse格式
+    return successResponse(mockData);
   } catch (error) {
     console.error('Error handling stock basic request:', error);
     return {

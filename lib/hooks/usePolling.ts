@@ -20,6 +20,12 @@ export const usePolling = (
   const { activeTab } = useUserStore();
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const callbackRef = useRef(callback);
+  const isClient = useRef(false);
+
+  // 确保只在客户端执行
+  useEffect(() => {
+    isClient.current = true;
+  }, []);
 
   // 更新callback引用
   useEffect(() => {
@@ -27,6 +33,11 @@ export const usePolling = (
   }, [callback]);
 
   useEffect(() => {
+    // 只在客户端执行
+    if (!isClient.current) {
+      return;
+    }
+
     const isActive = activeTab === tabKey;
 
     // 清理之前的定时器
@@ -61,6 +72,11 @@ export const usePolling = (
 
   // 手动控制函数
   const start = () => {
+    // 只在客户端执行
+    if (!isClient.current) {
+      return;
+    }
+
     if (!intervalRef.current && activeTab === tabKey) {
       callbackRef.current();
       intervalRef.current = setInterval(() => {
@@ -70,6 +86,11 @@ export const usePolling = (
   };
 
   const stop = () => {
+    // 只在客户端执行
+    if (!isClient.current) {
+      return;
+    }
+
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
