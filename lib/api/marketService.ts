@@ -1,4 +1,5 @@
-import { api, FinancialUnitConverter } from './client';
+import { api } from './client';
+import { FinancialUnitConverter } from '../utils/data-converter';
 
 // 市场数据类型定义
 export interface StockQuote {

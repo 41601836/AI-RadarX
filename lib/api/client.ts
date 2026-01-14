@@ -3,8 +3,6 @@ import { ApiResponse } from './common/response';
 import { logger } from '../utils/logger';
 import { FinancialUnitConverter } from '../utils/data-converter';
 
-export { FinancialUnitConverter };
-
 // 扩展InternalAxiosRequestConfig添加metadata属性
 interface ExtendedAxiosRequestConfig extends InternalAxiosRequestConfig {
   metadata?: {

@@ -6,7 +6,7 @@ import { fetchHeatFlowStockSeat } from '@/lib/api/heatFlow/stockSeat';
 
 /**
  * API处理函数
- * 接口路径：/v1/heat/flow/stock/seat
+ * 接口路径：/api/v1/heat/flow/stock/seat
  * 请求方法：GET
  */
 async function handleHeatFlowStockSeatRequest(request: NextRequest) {

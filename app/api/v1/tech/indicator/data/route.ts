@@ -6,7 +6,7 @@ import { fetchTechIndicatorData } from '@/lib/api/techIndicator/indicator';
 
 /**
  * API处理函数
- * 接口路径：/v1/tech/indicator/data
+ * 接口路径：/api/v1/tech/indicator/data
  * 请求方法：GET
  */
 async function handleTechIndicatorDataRequest(request: NextRequest) {

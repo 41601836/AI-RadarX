@@ -3,6 +3,7 @@ import { apiGet, MockDataGenerator } from '../common/fetch';
 import { ApiResponse } from '../common/response';
 import { getTushareDailyData, getTushareStockBasic, convertTushareDailyToOHLCV } from '../common/tushare';
 import { calculateCumulativeWAD, WADItem } from '@/lib/algorithms/wad';
+import { FinancialUnitConverter } from '@/lib/utils/data-converter';
 
 export interface MarketDataParams {
   stockCode: string;
@@ -31,12 +32,12 @@ export interface MarketData {
 
 // 基于WAD的市场数据增强函数
 function enhanceMarketDataWithWAD(dailyData: any[], stockCode: string, stockName: string): MarketData {
-  // 计算累积WAD值
+  // 计算累积WAD值 - 转换为元
   const wadItems: WADItem[] = dailyData.map(item => ({
     timestamp: item.timestamp,
-    high: item.high,
-    low: item.low,
-    close: item.close
+    high: FinancialUnitConverter.centsToYuan(item.high),
+    low: FinancialUnitConverter.centsToYuan(item.low),
+    close: FinancialUnitConverter.centsToYuan(item.close)
   }));
   
   const cumulativeWAD = calculateCumulativeWAD(wadItems, {

@@ -5,6 +5,7 @@ import { calculateHHI, calculateAverageCost, identifyChipPeaks, calculateSupport
 import { getTushareDailyData, getTushareStockBasic, convertTushareToChipData, convertTushareDailyToOHLCV } from '../common/tushare';
 import { ApiError, stockCodeFormatError } from '../common/errors';
 import { calculateCumulativeWAD, WADItem } from '@/lib/algorithms/wad'; // 导入WAD计算函数和类型
+import { FinancialUnitConverter } from '@/lib/utils/data-converter'; // 导入单位转换工具
 import { freeScanner, RealtimeStockData } from '../common/freeScanner'; // 导入实时行情扫描器
 import { formatDateTime, isValidStockCode } from '../common/utils'; // 导入通用工具函数
 
@@ -74,21 +75,21 @@ function simulateChipDistributionWithWAD(dailyData: any[], stockCode: string, st
   // 计算总成交量：使用历史数据的总成交量
   const totalVolume = dailyData.reduce((sum, item) => sum + item.volume, 0) || 10000000;
   
-  // 准备WAD计算所需的数据源
+  // 准备WAD计算所需的数据源 - 转换为元
   const wadItems: WADItem[] = dailyData.map(item => ({
     timestamp: item.timestamp,
-    high: item.high,
-    low: item.low,
-    close: item.close
+    high: FinancialUnitConverter.centsToYuan(item.high),
+    low: FinancialUnitConverter.centsToYuan(item.low),
+    close: FinancialUnitConverter.centsToYuan(item.close)
   }));
   
-  // 如果有实时数据，将其添加到WAD计算中
+  // 如果有实时数据，将其添加到WAD计算中 - 转换为元
   if (realtimeData) {
     wadItems.push({
       timestamp: realtimeData.timestamp,
-      high: realtimeData.highPrice,
-      low: realtimeData.lowPrice,
-      close: realtimeData.currentPrice
+      high: FinancialUnitConverter.centsToYuan(realtimeData.highPrice),
+      low: FinancialUnitConverter.centsToYuan(realtimeData.lowPrice),
+      close: FinancialUnitConverter.centsToYuan(realtimeData.currentPrice)
     });
   }
   

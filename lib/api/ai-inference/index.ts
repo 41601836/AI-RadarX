@@ -5,6 +5,7 @@ import { getTushareDailyData } from '../common/tushare';
 import { fetchChipDistribution } from '../chip/distribution';
 import { fetchOpinionSummary } from '../publicOpinion/summary';
 import { fetchHeatFlowStockSeat } from '../heatFlow/stockSeat';
+import { fetchTechIndicatorData } from '../techIndicator/indicator';
 import { defaultAIClient } from './ai-client';
 
 // 缓存管理
@@ -22,6 +23,21 @@ interface MarketSentiment {
   sentimentLevel: 'ice' | 'cold' | 'neutral' | 'hot' | 'boiling'; // 情绪等级：冰点、寒冷、中性、火热、沸点
   advanceDeclineRatio: number; // 涨跌停比
   volumeForecast: number; // 成交量预估
+}
+
+// 技术指标接口
+export interface TechnicalIndicators {
+  rsi6: number;
+  rsi12: number;
+  rsi24: number;
+  ma5: number;
+  ma10: number;
+  ma20: number;
+  ma30: number;
+  ma60: number;
+  macdDiff: number;
+  macdDea: number;
+  macdBar: number;
 }
 
 // 聚合数据接口
@@ -46,6 +62,8 @@ export interface AggregatedStockData {
     heatScore: number; // 游资热度评分(0-100)
   };
   marketSentiment: MarketSentiment; // 全市场情绪数据
+  technicalIndicators: TechnicalIndicators; // 技术指标数据
+  riskScore: number; // 风险分值(0-100)
 }
 
 // AI分析结果接口
@@ -70,11 +88,12 @@ export async function fetchAggregatedStockData(stockCode: string): Promise<Aggre
 
   try {
     // 并行请求各维度数据
-    const [chipData, sentimentData, heatFlowData, stockPriceData] = await Promise.all([
+    const [chipData, sentimentData, heatFlowData, stockPriceData, techIndicatorData] = await Promise.all([
       fetchChipDistribution({ stockCode }),
       fetchOpinionSummary({ stockCode, timeRange: '7d' }),
       fetchHeatFlowStockSeat({ stockCode }),
-      getTushareDailyData(stockCode, undefined, undefined)
+      getTushareDailyData(stockCode, undefined, undefined),
+      fetchTechIndicatorData({ stockCode })
     ]);
 
     // 计算筹码集中度评分 (0-100)
@@ -85,6 +104,34 @@ export async function fetchAggregatedStockData(stockCode: string): Promise<Aggre
 
     // 模拟计算全市场情绪数据
     const marketSentiment = calculateMarketSentiment();
+
+    // 获取最新的技术指标数据
+    const latestIndicator = techIndicatorData.data.indicatorDataList[0] || {};
+    
+    // 提取技术指标值
+      const technicalIndicators = {
+        rsi6: latestIndicator.rsi?.rsi6 || 0,
+        rsi12: latestIndicator.rsi?.rsi12 || 0,
+        rsi24: latestIndicator.rsi?.rsi24 || 0,
+        ma5: latestIndicator.ma?.ma5 || 0,
+        ma10: latestIndicator.ma?.ma10 || 0,
+        ma20: latestIndicator.ma?.ma20 || 0,
+        // 根据实际类型定义，MA指标只有ma5, ma10, ma20
+        ma30: 0, // 不支持的指标设为默认值
+        ma60: 0, // 不支持的指标设为默认值
+        macdDiff: latestIndicator.macd?.diff || 0,
+        macdDea: latestIndicator.macd?.dea || 0,
+        macdBar: latestIndicator.macd?.bar || 0
+      };
+
+    // 计算风险评分 (0-100)
+    const riskScore = calculateRiskScore({
+      chipConcentration: chipData.data.chipConcentration,
+      sentimentScore: sentimentData.data.opinionScore,
+      rsi: technicalIndicators.rsi24,
+      macdBar: technicalIndicators.macdBar,
+      heatScore
+    });
 
     return {
       stockCode,
@@ -99,14 +146,16 @@ export async function fetchAggregatedStockData(stockCode: string): Promise<Aggre
       sentimentData: {
         opinionScore: sentimentData.data.opinionScore,
         positiveRatio: sentimentData.data.positiveRatio,
-        hotEventsCount: sentimentData.data.hotEvents.length
+        hotEventsCount: sentimentData.data.hotEvents?.length || 0
       },
       heatFlowData: {
         hotMoneyNetBuy: heatFlowData.data.totalNetBuy,
-        hotSeatsCount: heatFlowData.data.hotSeatList.length,
+        hotSeatsCount: heatFlowData.data.hotSeatList?.length || 0,
         heatScore
       },
-      marketSentiment
+      marketSentiment,
+      technicalIndicators,
+      riskScore
     };
   } catch (error) {
     console.error('聚合数据失败:', error);
@@ -267,6 +316,55 @@ function calculateHeatFlowScore(heatFlowData: any): number {
   const netBuyScore = Math.min(Math.abs(heatFlowData.totalNetBuy) / 100000000 * 50, 50); // 净买入最高50分
   const seatsScore = Math.min(heatFlowData.hotSeatList.length * 5, 50); // 活跃席位最高50分
   return Math.round(netBuyScore + seatsScore);
+}
+
+/**
+ * 计算风险评分 (0-100)
+ * @param params 风险参数
+ * @returns 风险评分(0-100)
+ */
+interface RiskScoreParams {
+  chipConcentration: number;
+  sentimentScore: number;
+  rsi: number;
+  macdBar: number;
+  heatScore: number;
+}
+
+function calculateRiskScore(params: RiskScoreParams): number {
+  const { chipConcentration, sentimentScore, rsi, macdBar, heatScore } = params;
+  
+  // 筹码集中度风险（越高越集中，风险越低）
+  const chipRisk = Math.max(0, 100 - chipConcentration * 100);
+  
+  // 舆情风险（评分越低，风险越高）
+  const sentimentRisk = Math.max(0, 100 - sentimentScore);
+  
+  // RSI风险（超买超卖都增加风险）
+  let rsiRisk = 0;
+  if (rsi > 70) {
+    rsiRisk = (rsi - 70) * 2; // 超买增加风险
+  } else if (rsi < 30) {
+    rsiRisk = (30 - rsi) * 1.5; // 超卖增加风险
+  }
+  
+  // MACD风险（柱状图绝对值越大，风险越高）
+  const macdRisk = Math.min(Math.abs(macdBar) * 0.1, 30);
+  
+  // 游资热度风险（热度越高，风险越高）
+  const heatRisk = Math.min(heatScore * 0.8, 40);
+  
+  // 加权计算总风险（权重可根据实际情况调整）
+  const totalRisk = (
+    chipRisk * 0.2 +
+    sentimentRisk * 0.2 +
+    rsiRisk * 0.2 +
+    macdRisk * 0.2 +
+    heatRisk * 0.2
+  );
+  
+  // 确保风险评分在0-100之间
+  return Math.max(0, Math.min(100, Math.round(totalRisk)));
 }
 
 /**

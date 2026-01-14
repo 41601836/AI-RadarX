@@ -2,6 +2,12 @@
 import { create } from 'zustand';
 import { persist, type PersistStorage, type StorageValue } from 'zustand/middleware';
 import { DataBridge } from './data-bridge';
+import { defaultAIClient, AIAnalysisResult } from '../api/ai-inference/ai-client';
+import { Logger, logger } from '../utils/logger';
+
+// 创建专用的策略Logger实例
+const strategyLogger = logger.withCategory('Strategy');
+
 
 // 为 window 对象添加类型声明
 declare global {
@@ -330,60 +336,111 @@ export const useStrategyStore = create<StrategyState>()(
             stockCode,
           });
           
+          // 获取统一的股票数据
+          const bridge = new DataBridge(stockCode);
+          const unifiedData = await bridge.getAllData();
+          
+          // 基于统一数据生成 AI 分析决策
+          const aiDecision = await defaultAIClient.generateDecision(unifiedData);
+          
+          // 从 AI 决策中派生出各个 Agent 的投票
           const agentPromises = [
-            simulateChipAnalysisAgent(stockCode, state.agentWeights.chipAnalysis).then(vote => {
-              get().addThoughtLog({
-                agent: vote.agentName,
-                message: `筹码分析完成: ${vote.reasoning}`,
-                type: 'analysis',
-                stockCode,
-                confidence: vote.confidence,
-              });
-              return vote;
+            // 筹码分析专家
+            Promise.resolve({
+              agentId: 'chip_analysis',
+              agentName: '筹码分析专家',
+              confidence: Math.min(0.9, aiDecision.confidenceScore / 100 + 0.2),
+              direction: aiDecision.operationRating,
+              score: aiDecision.operationRating === 'buy' ? 0.8 : aiDecision.operationRating === 'sell' ? -0.8 : 0,
+              reasoning: `筹码分布分析: ${aiDecision.trendAnalysis}`,
+              timestamp: Date.now(),
+              weights: {
+                technical: 0.2,
+                fundamental: 0.1,
+                sentiment: 0.1,
+                chipAnalysis: 0.6,
+                risk: 0.0,
+              },
             }),
-            simulateRiskControlAgent(stockCode, state.agentWeights.riskControl).then(vote => {
-              if (vote) {
-                get().addThoughtLog({
-                  agent: vote.agentName,
-                  message: `风险评估完成: ${vote.reasoning}`,
-                  type: vote.score < -0.5 ? 'warning' : 'analysis',
-                  stockCode,
-                  confidence: vote.confidence,
-                });
-              }
-              return vote;
+            // 风险控制专家
+            Promise.resolve({
+              agentId: 'risk_control',
+              agentName: '风险控制专家',
+              confidence: Math.min(0.95, aiDecision.confidenceScore / 100 + 0.15),
+              direction: aiDecision.operationRating,
+              score: aiDecision.operationRating === 'buy' ? 0.7 : aiDecision.operationRating === 'sell' ? -0.9 : 0,
+              reasoning: `风险评估: ${aiDecision.riskWarning.join('; ')}`,
+              timestamp: Date.now(),
+              weights: {
+                technical: 0.0,
+                fundamental: 0.0,
+                sentiment: 0.0,
+                chipAnalysis: 0.0,
+                risk: 1.0,
+              },
             }),
-            simulateTechnicalAgent(stockCode, state.agentWeights.technical).then(vote => {
-              get().addThoughtLog({
-                agent: vote.agentName,
-                message: `技术分析完成: ${vote.reasoning}`,
-                type: 'analysis',
-                stockCode,
-                confidence: vote.confidence,
-              });
-              return vote;
+            // 技术分析专家
+            Promise.resolve({
+              agentId: 'technical',
+              agentName: '技术分析专家',
+              confidence: Math.min(0.85, aiDecision.confidenceScore / 100 + 0.15),
+              direction: aiDecision.operationRating,
+              score: aiDecision.operationRating === 'buy' ? 0.75 : aiDecision.operationRating === 'sell' ? -0.75 : 0,
+              reasoning: `技术指标分析: ${aiDecision.trendAnalysis}`,
+              timestamp: Date.now(),
+              weights: {
+                technical: 0.7,
+                fundamental: 0.1,
+                sentiment: 0.1,
+                chipAnalysis: 0.1,
+                risk: 0.0,
+              },
             }),
-            simulateFundamentalAgent(stockCode, state.agentWeights.fundamental).then(vote => {
-              get().addThoughtLog({
-                agent: vote.agentName,
-                message: `基本面分析完成: ${vote.reasoning}`,
-                type: 'analysis',
-                stockCode,
-                confidence: vote.confidence,
-              });
-              return vote;
+            // 基本面分析专家
+            Promise.resolve({
+              agentId: 'fundamental',
+              agentName: '基本面分析专家',
+              confidence: Math.min(0.85, aiDecision.confidenceScore / 100 + 0.15),
+              direction: aiDecision.operationRating,
+              score: aiDecision.operationRating === 'buy' ? 0.7 : aiDecision.operationRating === 'sell' ? -0.7 : 0,
+              reasoning: `基本面分析: ${aiDecision.mainIntention}`,
+              timestamp: Date.now(),
+              weights: {
+                technical: 0.1,
+                fundamental: 0.6,
+                sentiment: 0.1,
+                chipAnalysis: 0.1,
+                risk: 0.1,
+              },
             }),
-            simulateSentimentAgent(stockCode, state.agentWeights.sentiment).then(vote => {
-              get().addThoughtLog({
-                agent: vote.agentName,
-                message: `舆情分析完成: ${vote.reasoning}`,
-                type: 'analysis',
-                stockCode,
-                confidence: vote.confidence,
-              });
-              return vote;
+            // 舆情分析专家
+            Promise.resolve({
+              agentId: 'sentiment',
+              agentName: '舆情分析专家',
+              confidence: Math.min(0.8, aiDecision.confidenceScore / 100 + 0.15),
+              direction: aiDecision.operationRating,
+              score: aiDecision.operationRating === 'buy' ? 0.6 : aiDecision.operationRating === 'sell' ? -0.6 : 0,
+              reasoning: `舆情分析: ${aiDecision.mainIntention}`,
+              timestamp: Date.now(),
+              weights: {
+                technical: 0.1,
+                fundamental: 0.1,
+                sentiment: 0.6,
+                chipAnalysis: 0.1,
+                risk: 0.1,
+              },
             }),
-          ];
+          ].map(promise => promise.then(vote => {
+            get().addThoughtLog({
+              agent: vote.agentName,
+              message: `${vote.reasoning.substring(0, 100)}...`,
+              type: vote.score < -0.5 ? 'warning' : vote.direction === 'buy' ? 'analysis' : 'analysis',
+              stockCode,
+              confidence: vote.confidence,
+            });
+            return vote;
+          }));
+          
           
           // 等待所有 Agent 分析完成
           const agentResults = await Promise.all(agentPromises);
@@ -1070,6 +1127,7 @@ export const useStrategyStore = create<StrategyState>()(
       name: 'ai-trading-terminal-strategy-store',
       version: 1,
       storage: safeLocalStorage,
+      whitelist: ['agentWeights', 'weightAdjustmentHistory', 'decisionMemory'],
     }
   )
 );

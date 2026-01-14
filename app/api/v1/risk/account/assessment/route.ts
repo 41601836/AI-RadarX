@@ -6,7 +6,7 @@ import { fetchAccountRiskAssessment } from '@/lib/api/risk/assessment';
 
 /**
  * API处理函数
- * 接口路径：/v1/risk/account/assessment
+ * 接口路径：/api/v1/risk/account/assessment
  * 请求方法：GET
  */
 async function handleRiskAccountAssessmentRequest(request: NextRequest) {

@@ -6,7 +6,7 @@ import { fetchHeatFlowAlertList } from '@/lib/api/heatFlow/alert';
 
 /**
  * API处理函数
- * 接口路径：/v1/heat/flow/alert/list
+ * 接口路径：/api/v1/heat/flow/alert/list
  * 请求方法：GET
  */
 async function handleHeatFlowAlertListRequest(request: NextRequest) {

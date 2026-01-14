@@ -2,6 +2,13 @@
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
+  webpack: (config) => {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@': '.',
+    };
+    return config;
+  },
   
   // 构建优化
   compiler: {
@@ -53,9 +60,9 @@ const nextConfig = {
   // 跨域请求配置
   async rewrites() {
     return [
-      // API路由重写（如果需要）
+      // 排除AI推理API的重写规则
       {
-        source: '/api/:path*',
+        source: '/api/:path((?!ai-inference).*)',
         destination: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1/:path*',
       },
     ];

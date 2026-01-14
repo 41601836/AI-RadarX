@@ -7,7 +7,7 @@ import { successResponse } from '@/lib/api/common/response';
 
 /**
  * API处理函数
- * 接口路径：/v1/order/large/real-time
+ * 接口路径：/api/v1/order/large/real-time
  * 请求方法：GET
  */
 async function handleOrderLargeRealTimeRequest(request: NextRequest) {

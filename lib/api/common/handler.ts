@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { successResponse, ApiResponse } from './response';
+import { successResponse, ApiResponse, generateRequestId } from './response';
 import { errorResponse, internalServerError, ApiError } from './errors';
 import { Logger, logger } from '../../utils/logger';
 
@@ -38,7 +38,7 @@ export async function apiHandler<T>(
   handler: (request: NextRequest) => Promise<T | ApiResponse<T>>
 ): Promise<NextResponse> {
   // 生成requestId
-  const requestId = Logger.generateRequestId();
+  const requestId = generateRequestId();
   const apiLogger = logger.withCategory('API').withRequestId(requestId);
   
   // 记录请求开始时间
@@ -59,21 +59,29 @@ export async function apiHandler<T>(
     
     // 检查返回结果是否已经是ApiResponse类型
     if (result && typeof result === 'object' && 'code' in result && 'msg' in result && 'data' in result) {
-      // 已经是标准的ApiResponse格式，直接返回
-      const httpStatusCode = getHttpStatusCode((result as any).code);
+      // 已经是标准的ApiResponse格式，确保使用相同的requestId
+      const apiResponse = {
+        ...(result as ApiResponse<T>),
+        requestId,
+        timestamp: Date.now()
+      };
+      const httpStatusCode = getHttpStatusCode(apiResponse.code);
       
       apiLogger.info('API请求成功', {
         pathname: request.nextUrl.pathname,
         method: request.method,
         duration,
-        code: (result as any).code,
-        msg: (result as any).msg
+        code: apiResponse.code,
+        msg: apiResponse.msg
       });
       
-      return NextResponse.json(result, { status: httpStatusCode });
+      return NextResponse.json(apiResponse, { status: httpStatusCode });
     } else {
-      // 不是标准格式，使用successResponse包装后返回
-      const response = successResponse(result as T);
+      // 不是标准格式，使用successResponse包装后返回，确保使用相同的requestId
+      const response = {
+        ...successResponse(result as T),
+        requestId
+      };
       
       apiLogger.info('API请求成功', {
         pathname: request.nextUrl.pathname,
@@ -93,8 +101,12 @@ export async function apiHandler<T>(
     let httpStatusCode = 500;
     
     if (error instanceof ApiError) {
-      // 处理ApiError类型的错误
-      errorResponseData = errorResponse(error);
+      // 处理ApiError类型的错误，确保使用相同的requestId
+      const baseErrorResponse = errorResponse(error);
+      errorResponseData = {
+        ...baseErrorResponse,
+        requestId
+      };
       httpStatusCode = getHttpStatusCode(error.code);
       
       apiLogger.error('API请求错误', {
@@ -106,9 +118,13 @@ export async function apiHandler<T>(
         stack: error.stack
       });
     } else {
-      // 处理其他类型的错误
+      // 处理其他类型的错误，确保使用相同的requestId
       const apiError = internalServerError(error as Error);
-      errorResponseData = errorResponse(apiError);
+      const baseErrorResponse = errorResponse(apiError);
+      errorResponseData = {
+        ...baseErrorResponse,
+        requestId
+      };
       
       apiLogger.error('API请求内部错误', {
         pathname: request.nextUrl.pathname,
@@ -137,7 +153,7 @@ export async function apiHandlerWithValidation<T>(
   handler: (request: NextRequest) => Promise<T>
 ): Promise<NextResponse> {
   // 生成requestId
-  const requestId = Logger.generateRequestId();
+  const requestId = generateRequestId();
   const apiLogger = logger.withCategory('API').withRequestId(requestId);
   
   // 记录请求开始时间
@@ -154,7 +170,7 @@ export async function apiHandlerWithValidation<T>(
     const validationResult = await validator(request);
     
     if (validationResult instanceof ApiError) {
-      // 验证失败，返回验证错误
+      // 验证失败，返回验证错误，确保使用相同的requestId
       const duration = performance.now() - startTime;
       
       apiLogger.warn('API请求参数验证失败', {
@@ -165,14 +181,20 @@ export async function apiHandlerWithValidation<T>(
         message: validationResult.message
       });
       
+      const baseErrorResponse = errorResponse(validationResult);
+      const errorResponseData = {
+        ...baseErrorResponse,
+        requestId
+      };
+      
       return NextResponse.json(
-        errorResponse(validationResult),
+        errorResponseData,
         { status: getHttpStatusCode(validationResult.code) }
       );
     }
     
     if (!validationResult) {
-      // 验证失败，返回通用的参数验证错误
+      // 验证失败，返回通用的参数验证错误，确保使用相同的requestId
       const duration = performance.now() - startTime;
       
       apiLogger.warn('API请求参数验证失败', {
@@ -182,8 +204,15 @@ export async function apiHandlerWithValidation<T>(
         message: '参数验证失败'
       });
       
+      const apiError = internalServerError(new Error('参数验证失败'));
+      const baseErrorResponse = errorResponse(apiError);
+      const errorResponseData = {
+        ...baseErrorResponse,
+        requestId
+      };
+      
       return NextResponse.json(
-        errorResponse(internalServerError(new Error('参数验证失败'))),
+        errorResponseData,
         { status: 400 }
       );
     }
@@ -194,8 +223,11 @@ export async function apiHandlerWithValidation<T>(
     // 计算执行时间
     const duration = performance.now() - startTime;
     
-    // 返回成功响应
-    const response = successResponse(result);
+    // 返回成功响应，确保使用相同的requestId
+    const response = {
+      ...successResponse(result),
+      requestId
+    };
     
     apiLogger.info('API请求成功(带验证)', {
         pathname: request.nextUrl.pathname,
@@ -214,8 +246,12 @@ export async function apiHandlerWithValidation<T>(
     let httpStatusCode = 500;
     
     if (error instanceof ApiError) {
-      // 处理ApiError类型的错误
-      errorResponseData = errorResponse(error);
+      // 处理ApiError类型的错误，确保使用相同的requestId
+      const baseErrorResponse = errorResponse(error);
+      errorResponseData = {
+        ...baseErrorResponse,
+        requestId
+      };
       httpStatusCode = getHttpStatusCode(error.code);
       
       apiLogger.error('API请求错误(带验证)', {
@@ -227,9 +263,13 @@ export async function apiHandlerWithValidation<T>(
         stack: error.stack
       });
     } else {
-      // 处理其他类型的错误
+      // 处理其他类型的错误，确保使用相同的requestId
       const apiError = internalServerError(error as Error);
-      errorResponseData = errorResponse(apiError);
+      const baseErrorResponse = errorResponse(apiError);
+      errorResponseData = {
+        ...baseErrorResponse,
+        requestId
+      };
       
       apiLogger.error('API请求内部错误(带验证)', {
         pathname: request.nextUrl.pathname,

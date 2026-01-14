@@ -17,7 +17,7 @@ export enum ErrorCode {
   // 业务错误
   STOCK_CODE_FORMAT_ERROR = 60001,
   ACCOUNT_NOT_EXIST = 60002,
-  NO_HEAT_FLOW_DATA = 60003,
+  NO_HOT_MONEY_RECORD = 60003,
   INVALID_LARGE_ORDER_THRESHOLD = 60004,
   INVALID_STOP_RULE_VALUE = 60005,
 }
@@ -34,7 +34,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   [ErrorCode.SERVICE_UNAVAILABLE]: '服务暂不可用',
   [ErrorCode.STOCK_CODE_FORMAT_ERROR]: '股票代码格式错误',
   [ErrorCode.ACCOUNT_NOT_EXIST]: '账户不存在',
-  [ErrorCode.NO_HEAT_FLOW_DATA]: '游资数据暂无记录',
+  [ErrorCode.NO_HOT_MONEY_RECORD]: '游资数据暂无记录',
   [ErrorCode.INVALID_LARGE_ORDER_THRESHOLD]: '大单阈值设置不合理',
   [ErrorCode.INVALID_STOP_RULE_VALUE]: '止损/止盈值设置不合理',
 };
@@ -120,8 +120,8 @@ export function accountNotExistError(message?: string): ApiError {
   return new ApiError(ErrorCode.ACCOUNT_NOT_EXIST, message);
 }
 
-export function noHeatFlowDataError(message?: string): ApiError {
-  return new ApiError(ErrorCode.NO_HEAT_FLOW_DATA, message);
+export function noHotMoneyRecordError(message?: string): ApiError {
+  return new ApiError(ErrorCode.NO_HOT_MONEY_RECORD, message);
 }
 
 export function invalidLargeOrderThresholdError(message?: string): ApiError {

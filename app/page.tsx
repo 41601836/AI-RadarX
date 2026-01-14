@@ -1,28 +1,20 @@
 'use client';
 
 // 主页面 - 动态标签页渲染
-import React, { useEffect, memo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import SearchComponent from '../components/SearchComponent';
-import ErrorBoundary from '../components/ErrorBoundary';
 import DataHealth from '../components/DataHealth';
 import EnvironmentControl, { resetZustandStores, EnvironmentMode } from '../lib/components/EnvironmentControl';
 import { useUserStore, ActiveTab } from '../lib/store/user-portfolio';
 
-// 导入所有页面组件
-import Dashboard from '../components/pages/Dashboard';
-import Market from '../components/pages/Market';
-import Trade from '../components/pages/Trade';
-import Strategy from '../components/pages/Strategy';
-import Assets from '../components/pages/Assets';
-import Settings from '../components/pages/Settings';
-
-// 使用memo包装页面组件，避免不必要的重新渲染
-const MemoizedDashboard = memo(Dashboard);
-const MemoizedMarket = memo(Market);
-const MemoizedTrade = memo(Trade);
-const MemoizedStrategy = memo(Strategy);
-const MemoizedAssets = memo(Assets);
-const MemoizedSettings = memo(Settings);
+// 动态导入所有页面组件，禁用SSR
+const Dashboard = dynamic(() => import('../components/pages/Dashboard'), { ssr: false });
+const Market = dynamic(() => import('../components/pages/Market'), { ssr: false });
+const Trade = dynamic(() => import('../components/pages/Trade'), { ssr: false });
+const Strategy = dynamic(() => import('../components/pages/Strategy'), { ssr: false });
+const Assets = dynamic(() => import('../components/pages/Assets'), { ssr: false });
+const Settings = dynamic(() => import('../components/pages/Settings'), { ssr: false });
 
 const Home: React.FC = () => {
   // 从用户存储中获取当前活动标签和切换方法
@@ -37,68 +29,6 @@ const Home: React.FC = () => {
     setIsHydrated(true);
   }, []);
 
-  // 处理全局键盘事件
-  useEffect(() => {
-    // 只有在客户端完成Hydration后才添加事件监听器
-    if (isHydrated) {
-      const handleKeyDown = (e: KeyboardEvent) => {
-        // F键映射功能
-        if (e.key.startsWith('F')) {
-          const fKeyNumber = parseInt(e.key.substring(1));
-          switch (fKeyNumber) {
-            case 1:
-              setActiveTab('dashboard');
-              break;
-            case 2:
-              setActiveTab('market');
-              break;
-            case 3:
-              setActiveTab('trade');
-              break;
-            case 4:
-              setActiveTab('strategy');
-              break;
-            case 5:
-              setActiveTab('assets');
-              break;
-            case 6:
-              setActiveTab('settings');
-              break;
-          }
-        }
-        // CLI激活功能 - 捕获回车键
-        else if (e.key === 'Enter') {
-          // 检查当前焦点元素是否是输入框或搜索框
-          const isFocusInInput = document.activeElement?.tagName === 'INPUT' || 
-                                 document.activeElement?.tagName === 'TEXTAREA' ||
-                                 document.activeElement?.classList.contains('search-input');
-          
-          if (!isFocusInInput) {
-            // 激活搜索框
-            const searchInput = document.querySelector('.search-input');
-            if (searchInput instanceof HTMLInputElement) {
-              searchInput.focus();
-              searchInput.select();
-            }
-          }
-        }
-      };
-
-      // 添加事件监听器
-      document.addEventListener('keydown', handleKeyDown);
-      
-      // 清理事件监听器
-      return () => {
-        document.removeEventListener('keydown', handleKeyDown);
-      };
-    }
-  }, [setActiveTab, isHydrated]);
-
-  // 在客户端未完成Hydration时返回null，避免Hydration不匹配
-  if (!isHydrated) {
-    return null;
-  }
-
   // 定义标签页配置
   const tabs: { key: ActiveTab; label: string }[] = [
     { key: 'dashboard', label: '仪表盘' },
@@ -109,29 +39,87 @@ const Home: React.FC = () => {
     { key: 'settings', label: '设置' }
   ];
 
+  // 处理全局键盘事件
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // F键映射功能
+      if (e.key.startsWith('F')) {
+        const fKeyNumber = parseInt(e.key.substring(1));
+        switch (fKeyNumber) {
+          case 1:
+            setActiveTab('dashboard');
+            break;
+          case 2:
+            setActiveTab('market');
+            break;
+          case 3:
+            setActiveTab('trade');
+            break;
+          case 4:
+            setActiveTab('strategy');
+            break;
+          case 5:
+            setActiveTab('assets');
+            break;
+          case 6:
+            setActiveTab('settings');
+            break;
+        }
+      }
+      // CLI激活功能 - 捕获回车键
+      else if (e.key === 'Enter') {
+        // 检查当前焦点元素是否是输入框或搜索框
+        const isFocusInInput = document.activeElement?.tagName === 'INPUT' || 
+                               document.activeElement?.tagName === 'TEXTAREA' ||
+                               document.activeElement?.classList.contains('search-input');
+        
+        if (!isFocusInInput) {
+          // 激活搜索框
+          const searchInput = document.querySelector('.search-input');
+          if (searchInput instanceof HTMLInputElement) {
+            searchInput.focus();
+            searchInput.select();
+          }
+        }
+      }
+    };
+
+    // 添加事件监听器
+    document.addEventListener('keydown', handleKeyDown);
+    
+    // 清理事件监听器
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [setActiveTab]);
+
   // 根据当前活动标签渲染对应的组件
   const renderActiveTab = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <MemoizedDashboard />;
+        return <Dashboard />;
       case 'market':
-        return <MemoizedMarket />;
+        return <Market />;
       case 'trade':
-        return <MemoizedTrade />;
+        return <Trade />;
       case 'strategy':
-        return <MemoizedStrategy />;
+        return <Strategy />;
       case 'assets':
-        return <MemoizedAssets />;
+        return <Assets />;
       case 'settings':
-        return <MemoizedSettings />;
+        return <Settings />;
       default:
-        return <MemoizedDashboard />;
+        return <Dashboard />;
     }
   };
 
+  // 在客户端未完成Hydration时返回null，避免Hydration不匹配
+  if (!isHydrated) {
+    return null;
+  }
+
   return (
-    <ErrorBoundary moduleName="整个应用">
-      <div className="h-screen overflow-hidden flex flex-col bg-black text-white font-mono">
+    <div className="h-screen overflow-hidden flex flex-col bg-black text-white font-mono">
         {/* 顶部导航栏 */}
         <header className="flex justify-between items-center p-4 border-b border-green-500 gap-6 z-2000 relative">
           <div>
@@ -171,7 +159,6 @@ const Home: React.FC = () => {
           {renderActiveTab()}
         </main>
       </div>
-    </ErrorBoundary>
   );
 };
 

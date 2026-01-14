@@ -6,7 +6,7 @@ import { recognizeKlinePattern } from '@/lib/api/techIndicator/klinePattern';
 
 /**
  * API处理函数
- * 接口路径：/v1/tech/kline/pattern/recognize
+ * 接口路径：/api/v1/tech/kline/pattern/recognize
  * 请求方法：GET
  */
 async function handleTechKlinePatternRecognizeRequest(request: NextRequest) {

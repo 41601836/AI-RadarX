@@ -2,7 +2,7 @@
 export interface ApiResponse<T = any> {
   code: number;
   msg: string;
-  data: T;
+  data?: T;
   requestId: string;
   timestamp: number;
 }
@@ -24,12 +24,12 @@ export interface PaginationResponse<T> {
 
 // 生成唯一请求ID
 export function generateRequestId(): string {
-  return `req-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 }
 
 // 生成成功响应
 export function successResponse<T = any>(
-  data: T = {} as T,
+  data?: T,
   msg: string = 'success'
 ): ApiResponse<T> {
   return {
@@ -61,6 +61,21 @@ export function paginatedSuccessResponse<T>(
       pageSize,
       pages,
     },
+    requestId: generateRequestId(),
+    timestamp: Date.now(),
+  };
+}
+
+// 生成错误响应
+export function errorResponse(
+  code: number,
+  msg: string,
+  data?: any
+): ApiResponse<any> {
+  return {
+    code,
+    msg,
+    data,
     requestId: generateRequestId(),
     timestamp: Date.now(),
   };

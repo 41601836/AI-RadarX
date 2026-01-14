@@ -6,7 +6,7 @@ import { fetchLargeOrderTrend } from '@/lib/api/largeOrder/trend';
 
 /**
  * API处理函数
- * 接口路径：/v1/order/large/trend
+ * 接口路径：/api/v1/order/large/trend
  * 请求方法：GET
  */
 async function handleOrderLargeTrendRequest(request: NextRequest) {
