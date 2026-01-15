@@ -154,6 +154,53 @@ const Strategy: React.FC = () => {
           </div>
         </div>
         
+        {/* 自省可视化 */}
+        {currentConsensus && (
+          <div className="introspection-card">
+            <h3>AI 自省分析</h3>
+            <div className="introspection-content">
+              <div className="introspection-metrics">
+                <div className="metric-item">
+                  <span className="metric-label">决策自信度</span>
+                  <span className="metric-value">{(currentConsensus.confidence * 100).toFixed(1)}%</span>
+                </div>
+                <div className="metric-item">
+                  <span className="metric-label">多空分歧度</span>
+                  <span className="metric-value">
+                    {(() => {
+                      const buyVotes = currentVotes.filter(v => v.direction === 'buy').length;
+                      const sellVotes = currentVotes.filter(v => v.direction === 'sell').length;
+                      const totalVotes = buyVotes + sellVotes;
+                      return totalVotes > 0 ? Math.abs((buyVotes - sellVotes) / totalVotes * 100).toFixed(1) : '0.0';
+                    })()}%
+                  </span>
+                </div>
+                <div className="metric-item">
+                  <span className="metric-label">风险等级</span>
+                  <span className={`metric-value ${currentConsensus.riskLevel === 'high' ? 'text-rose-400' : currentConsensus.riskLevel === 'medium' ? 'text-yellow-400' : 'text-emerald-400'}`}>
+                    {currentConsensus.riskLevel === 'high' ? '高' : currentConsensus.riskLevel === 'medium' ? '中' : '低'}
+                  </span>
+                </div>
+              </div>
+              <div className="introspection-chart">
+                <div className="chart-title">智能体投票分布</div>
+                <div className="vote-distribution">
+                  {currentVotes.map((vote) => (
+                    <div 
+                      key={vote.agentId} 
+                      className={`vote-bar ${vote.direction === 'buy' ? 'bullish' : vote.direction === 'sell' ? 'bearish' : 'neutral'}`}
+                      style={{ width: `${vote.confidence * 100}%` }}
+                      title={`${vote.agentName}: ${vote.direction === 'buy' ? '看多' : vote.direction === 'sell' ? '看空' : '观望'} (${(vote.confidence * 100).toFixed(1)}%)`}
+                    >
+                      <span className="vote-agent">{vote.agentName}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        
         {/* 思考链控制台 */}
         <div className="console-container">
           <StrategyConsole stockCode={stockCode} />
@@ -551,6 +598,124 @@ const Strategy: React.FC = () => {
           display: flex;
           gap: 16px;
           flex-wrap: wrap;
+        }
+
+        /* 自省可视化样式 */
+        .introspection-card {
+          background: linear-gradient(135deg, rgba(30, 30, 46, 0.9), rgba(15, 23, 42, 0.9));
+          backdrop-filter: blur(10px);
+        }
+
+        .introspection-content {
+          display: flex;
+          flex-direction: column;
+          gap: 20px;
+        }
+
+        .introspection-metrics {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 16px;
+        }
+
+        .introspection-metrics .metric-item {
+          background: rgba(15, 23, 42, 0.5);
+          padding: 16px;
+          border-radius: 8px;
+          text-align: center;
+          border-left: 3px solid #89dceb;
+        }
+
+        .introspection-metrics .metric-label {
+          color: #94a3b8;
+          font-size: 12px;
+          font-weight: 500;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          margin-bottom: 8px;
+          display: block;
+        }
+
+        .introspection-metrics .metric-value {
+          font-size: 24px;
+          font-weight: 700;
+          font-family: 'Courier New', monospace;
+          color: #89dceb;
+          text-shadow: 0 0 15px rgba(137, 220, 235, 0.5);
+        }
+
+        .introspection-chart {
+          background: rgba(15, 23, 42, 0.5);
+          padding: 20px;
+          border-radius: 8px;
+        }
+
+        .introspection-chart .chart-title {
+          color: #94a3b8;
+          font-size: 14px;
+          font-weight: 500;
+          margin-bottom: 16px;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        .vote-distribution {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .vote-bar {
+          height: 32px;
+          border-radius: 4px;
+          display: flex;
+          align-items: center;
+          padding: 0 12px;
+          transition: all 0.3s ease;
+          position: relative;
+          overflow: hidden;
+        }
+
+        .vote-bar::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          height: 100%;
+          background: linear-gradient(90deg, rgba(255, 255, 255, 0.1), transparent);
+          animation: shimmer 2s infinite;
+        }
+
+        @keyframes shimmer {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
+
+        .vote-bar.bullish {
+          background: linear-gradient(90deg, rgba(16, 185, 129, 0.2), rgba(16, 185, 129, 0.1));
+          border-left: 4px solid #10b981;
+        }
+
+        .vote-bar.bearish {
+          background: linear-gradient(90deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.1));
+          border-left: 4px solid #ef4444;
+        }
+
+        .vote-bar.neutral {
+          background: linear-gradient(90deg, rgba(245, 158, 11, 0.2), rgba(245, 158, 11, 0.1));
+          border-left: 4px solid #f59e0b;
+        }
+
+        .vote-bar:hover {
+          transform: translateX(5px);
+          box-shadow: 0 0 20px rgba(137, 220, 235, 0.3);
+        }
+
+        .vote-agent {
+          color: #e2e8f0;
+          font-size: 12px;
+          font-weight: 500;
+          z-index: 1;
         }
 
         .console-container {

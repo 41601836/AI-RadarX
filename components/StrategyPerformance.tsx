@@ -3,6 +3,7 @@
 
 import React from 'react';
 import { BacktestResult } from '../lib/algorithms/backtester';
+import Skeleton from './Skeleton';
 
 interface StrategyPerformanceProps {
   backtestResult: BacktestResult | null;
@@ -13,33 +14,33 @@ export default function StrategyPerformance({ backtestResult, loading }: Strateg
   if (loading) {
     return (
       <div className="strategy-performance">
-        <div className="loading-container">
-          <div className="loading-spinner"></div>
-          <p>回测中...</p>
+        <div className="skeleton-container">
+          <Skeleton type="text" width="200px" height="24px" className="mb-4" />
+          <div className="metrics-skeleton">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="metric-skeleton">
+                <Skeleton type="text" width="80px" height="16px" />
+                <Skeleton type="text" width="60px" height="20px" className="mt-2" />
+              </div>
+            ))}
+          </div>
+          <Skeleton type="chart" width="100%" height="200px" className="mt-8" />
         </div>
         
         <style jsx>{`
-          .loading-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
+          .skeleton-container {
+            padding: 16px;
             height: 100%;
-            gap: 12px;
           }
           
-          .loading-spinner {
-            width: 40px;
-            height: 40px;
-            border: 4px solid rgba(137, 220, 235, 0.3);
-            border-top: 4px solid #89dceb;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
+          .metrics-skeleton {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
           }
           
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+          .metric-skeleton {
+            flex: 1;
           }
         `}</style>
       </div>
@@ -257,13 +258,13 @@ export default function StrategyPerformance({ backtestResult, loading }: Strateg
         }
 
         .metric-value.positive {
-          color: #10b981;
-          text-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+          color: #00FF94;
+          text-shadow: 0 0 10px rgba(0, 255, 148, 0.5);
         }
 
         .metric-value.negative {
-          color: #ef4444;
-          text-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
+          color: #FF0066;
+          text-shadow: 0 0 10px rgba(255, 0, 102, 0.3);
         }
 
         .performance-chart-container, .performance-details {

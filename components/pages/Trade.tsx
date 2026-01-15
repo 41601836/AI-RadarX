@@ -9,6 +9,7 @@ import { useMarketStore } from '../../lib/store/useMarketStore';
 import { useStockContext } from '../../lib/context/StockContext';
 import { useStrategyStore } from '../../lib/store/useStrategyStore';
 import { fetchPositions, submitOrder, OrderType, OrderDirection, OrderStatus } from '../../lib/api/trade/orderService';
+import { exportAndDownloadPostMortem } from '../../lib/utils/exporter';
 
 const Trade: React.FC = () => {
   // 添加客户端仅渲染模式
@@ -104,6 +105,7 @@ const Trade: React.FC = () => {
   const [showRiskConfirm, setShowRiskConfirm] = useState<boolean>(false);
   const [riskLevel, setRiskLevel] = useState<'low' | 'medium' | 'high' | undefined>(undefined);
   const [riskReasoning, setRiskReasoning] = useState<string | undefined>(undefined);
+  const [riskConfirmInput, setRiskConfirmInput] = useState<string>(''); // 用户输入的确认文本
   
   // 股票搜索相关
   const [stockList, setStockList] = useState<StockBasicInfo[]>([]);
@@ -283,20 +285,24 @@ const Trade: React.FC = () => {
   
   // 确认风险后执行买入
   const handleRiskConfirm = () => {
-    executeBuy();
+    if (riskConfirmInput === 'CONFIRM') {
+      executeBuy();
+      setRiskConfirmInput(''); // 重置输入
+    }
   };
   
   // 取消风险确认
   const handleRiskCancel = () => {
     setShowRiskConfirm(false);
+    setRiskConfirmInput(''); // 重置输入
   };
   
   return (
-    <div className="h-full flex flex-col bg-slate-900 text-slate-300 font-sans">
+    <div className="h-full flex flex-col bg-black text-slate-300 font-sans">
       {/* 风控确认对话框 */}
       {showRiskConfirm && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-800 border-2 border-red-500 rounded-lg max-w-md w-full p-6">
+          <div className="bg-black border-2 border-red-500 max-w-md w-full p-6">
             <div className="text-red-500 text-2xl font-bold mb-4 flex items-center">
               <span className="mr-2">⚠️</span>
               高风险警告
@@ -306,16 +312,29 @@ const Trade: React.FC = () => {
               <p className="mb-2">风险等级：<span className="text-red-400 font-semibold">{riskLevel}</span></p>
               <p className="text-sm text-slate-400">{riskReasoning}</p>
             </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-slate-400 mb-2">
+                风险评分 > 80%，请输入 "CONFIRM" 确认交易
+              </label>
+              <input
+                type="text"
+                value={riskConfirmInput}
+                onChange={(e) => setRiskConfirmInput(e.target.value.toUpperCase())}
+                placeholder="请输入 CONFIRM"
+                className="w-full p-3 bg-black text-slate-200 border border-red-500/50 focus:outline-none focus:ring-2 focus:ring-red-500"
+              />
+            </div>
             <div className="flex gap-3">
               <button
-                className="flex-1 p-3 bg-red-600 hover:bg-red-700 text-white rounded-md font-medium transition-colors"
+                className="flex-1 p-3 bg-red-600 hover:bg-red-700 text-white font-medium transition-colors"
                 onClick={handleRiskCancel}
               >
                 取消交易
               </button>
               <button
-                className="flex-1 p-3 bg-green-600 hover:bg-green-700 text-white rounded-md font-medium transition-colors"
+                className="flex-1 p-3 bg-green-600 hover:bg-green-700 text-white font-medium transition-colors"
                 onClick={handleRiskConfirm}
+                disabled={riskConfirmInput !== 'CONFIRM'}
               >
                 确认买入
               </button>
@@ -336,7 +355,7 @@ const Trade: React.FC = () => {
       
       <div className="flex flex-1 gap-6 p-6 overflow-hidden">
         {/* 交易表单 */}
-        <div className={`flex-1 max-w-lg p-6 rounded-lg ${side === 'buy' ? 'bg-emerald-500/5' : 'bg-rose-500/5'} border border-slate-800`}>
+        <div className={`flex-1 max-w-lg p-6 bg-black ${side === 'buy' ? 'bg-emerald-500/5 border border-emerald-500/20' : 'bg-rose-500/5 border border-rose-500/20'}`}>
           {/* 股票代码输入 */}
           <div className="mb-5">
             <label className="block text-sm font-medium text-slate-400 mb-2">股票代码/名称</label>
@@ -499,66 +518,65 @@ const Trade: React.FC = () => {
         </div>
         
         {/* 持仓看板 */}
-        <div className="flex-1 p-6 bg-slate-800/50 rounded-lg border border-slate-800 overflow-y-auto">
-          <h3 className="text-lg font-semibold text-cyan-300 mb-5">我的持仓</h3>
+        <div className="flex-1 p-6 bg-black overflow-y-auto">
+          <div className="flex justify-between items-center mb-5">
+            <h3 className="text-lg font-semibold text-cyan-300">我的持仓</h3>
+            <button 
+              className="bg-transparent border-none text-cyan-300 font-mono text-sm font-bold hover:text-cyan-100 transition-colors shadow-[0_0_10px_rgba(6,182,212,0.6)]"
+              onClick={() => exportAndDownloadPostMortem(useStrategyStore.getState().thoughtLogs, positions)}
+            >
+              导出复盘报告
+            </button>
+          </div>
           {positions.length === 0 ? (
             <div className="text-center py-10 text-slate-500 text-sm">
               暂无持仓
             </div>
           ) : (
-            <div className="space-y-4">
-              {positions.map((position) => {
-                // 从市场数据获取实时价格
-                const realtimeQuote = marketData.quotes[position.stockCode];
-                const realtimePrice = realtimeQuote?.price || position.currentPrice;
-                
-                // 更新盈亏和盈亏率计算
-                const updatedMarketValue = position.shares * realtimePrice;
-                const updatedProfitLoss = updatedMarketValue - (position.shares * position.averagePrice);
-                const updatedProfitLossRate = (updatedProfitLoss / (position.shares * position.averagePrice)) * 100;
-                
-                return (
-                  <div key={position.stockCode} className="p-4 bg-slate-800 rounded border border-slate-700 hover:bg-slate-700 transition-colors">
-                    <div className="flex justify-between items-center mb-3 pb-3 border-b border-slate-700">
-                      <div className="font-semibold text-cyan-300 text-base">{position.stockCode}</div>
-                      <div className="text-slate-300 text-sm">{position.stockName}</div>
-                    </div>
+            <div className="fincept-table">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-slate-700">
+                    <th className="text-left py-3 px-4 text-xs font-medium text-slate-400">股票代码</th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-slate-400">股票名称</th>
+                    <th className="text-right py-3 px-4 text-xs font-medium text-slate-400">持仓量</th>
+                    <th className="text-right py-3 px-4 text-xs font-medium text-slate-400">可用量</th>
+                    <th className="text-right py-3 px-4 text-xs font-medium text-slate-400">现价</th>
+                    <th className="text-right py-3 px-4 text-xs font-medium text-slate-400">盈亏额</th>
+                    <th className="text-right py-3 px-4 text-xs font-medium text-slate-400">盈亏率</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {positions.map((position) => {
+                    // 从市场数据获取实时价格
+                    const realtimeQuote = marketData.quotes[position.stockCode];
+                    const realtimePrice = realtimeQuote?.price || position.currentPrice;
                     
-                    <div className="grid grid-cols-5 gap-4">
-                      <div className="text-center">
-                        <div className="text-xs text-slate-500 mb-1">持仓量</div>
-                        <div className="text-sm font-medium text-slate-300">{position.shares} 股</div>
-                      </div>
-                      
-                      <div className="text-center">
-                        <div className="text-xs text-slate-500 mb-1">可用量</div>
-                        <div className="text-sm font-medium text-slate-300">{position.shares} 股</div>
-                      </div>
-                      
-                      <div className="text-center">
-                        <div className="text-xs text-slate-500 mb-1">现价</div>
-                        <div className={`text-sm font-medium ${realtimePrice > position.averagePrice ? 'text-emerald-300' : realtimePrice < position.averagePrice ? 'text-rose-300' : 'text-slate-300'}`}>
+                    // 更新盈亏和盈亏率计算
+                    const updatedMarketValue = position.shares * realtimePrice;
+                    const updatedProfitLoss = updatedMarketValue - (position.shares * position.averagePrice);
+                    const updatedProfitLossRate = (updatedProfitLoss / (position.shares * position.averagePrice)) * 100;
+                    
+                    return (
+                      <tr key={position.stockCode} className="border-b border-slate-800 hover:bg-slate-800/50 transition-colors">
+                        <td className="py-3 px-4 text-cyan-300">{position.stockCode}</td>
+                        <td className="py-3 px-4 text-slate-300">{position.stockName}</td>
+                        <td className="py-3 px-4 text-right text-slate-300 font-mono tabular-nums">{position.shares} 股</td>
+                        <td className="py-3 px-4 text-right text-slate-300 font-mono tabular-nums">{position.shares} 股</td>
+                        <td className={`py-3 px-4 text-right font-mono tabular-nums ${realtimePrice > position.averagePrice ? 'text-emerald-300' : realtimePrice < position.averagePrice ? 'text-rose-300' : 'text-slate-300'}`}>
                           ¥ {formatNumberToFixed2(realtimePrice)}
-                        </div>
-                      </div>
-                      
-                      <div className="text-center">
-                        <div className="text-xs text-slate-500 mb-1">盈亏额</div>
-                        <div className={`text-sm font-medium ${updatedProfitLoss >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+                        </td>
+                        <td className={`py-3 px-4 text-right font-mono tabular-nums ${updatedProfitLoss >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
                           ¥ {formatNumberWithUnit(updatedProfitLoss)}
-                        </div>
-                      </div>
-                      
-                      <div className="text-center">
-                        <div className="text-xs text-slate-500 mb-1">盈亏率</div>
-                        <div className={`text-sm font-medium animate-pulse ${updatedProfitLoss >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+                        </td>
+                        <td className={`py-3 px-4 text-right font-mono tabular-nums animate-pulse ${updatedProfitLoss >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
                           {formatNumberToFixed2(updatedProfitLossRate)}%
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </div>

@@ -179,7 +179,14 @@ export async function fetchOpinionSummary(
       return {
         ...response,
         data: {
-          ...response.data,
+          stockCode: response.data?.stockCode ?? '',
+          stockName: response.data?.stockName ?? '未知股票',
+          opinionScore: response.data?.opinionScore ?? 0,
+          positiveRatio: response.data?.positiveRatio ?? 0,
+          negativeRatio: response.data?.negativeRatio ?? 0,
+          neutralRatio: response.data?.neutralRatio ?? 0,
+          hotEvents: response.data?.hotEvents ?? [],
+          opinionTrend: response.data?.opinionTrend ?? [],
           _dataSource: dataSource
         }
       };

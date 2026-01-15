@@ -1,6 +1,6 @@
 {
   "name": "stock-trading-software",
-  "version": "1.0.0",
+  "version": "0.9.1",
   "description": "AI-powered stock trading software with six core modules",
   "scripts": {
     "dev": "next dev",

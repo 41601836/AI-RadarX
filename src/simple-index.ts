@@ -9,7 +9,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Health check route
-app.get('/api/v1/health', (req, res) => {
+app.get('/api/v1/health', (req: any, res: any) => {
   res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
@@ -18,7 +18,7 @@ app.get('/api/v1/health', (req, res) => {
 });
 
 // Simple chip analysis endpoint
-app.get('/api/v1/chip/distribution', (req, res) => {
+app.get('/api/v1/chip/distribution', (req: any, res: any) => {
   const { stockCode } = req.query;
   
   if (!stockCode) {

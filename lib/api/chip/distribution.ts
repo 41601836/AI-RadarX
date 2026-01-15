@@ -279,6 +279,35 @@ export async function fetchChipDistribution(
         ...response,
         data: {
           ...response.data,
+          stockCode: response.data?.stockCode || '',
+          stockName: response.data?.stockName || '',
+          date: response.data?.date || formatDateTime(new Date()),
+          chipDistribution: response.data?.chipDistribution || [],
+          chipConcentration: response.data?.chipConcentration || 0,
+          mainCostPrice: response.data?.mainCostPrice || 0,
+          supportPrice: response.data?.supportPrice || 0,
+          resistancePrice: response.data?.resistancePrice || 0,
+          chipPeakInfo: response.data?.chipPeakInfo || {
+            peakPrice: 0,
+            peakRatio: 0,
+            isSinglePeak: false,
+            peaks: [],
+            dominantPeak: {
+              price: 0,
+              ratio: 0,
+              volume: 0,
+              width: 0,
+              dominance: 0,
+              strength: 0,
+              reliability: 0,
+              centerPrice: 0,
+              volumeWeightedPrice: 0
+            },
+            secondaryPeaks: [],
+            peakDensity: 0,
+            peakQualityScore: 0,
+            priceRange: 0
+          },
           _dataSource: dataSource
         }
       };

@@ -19,7 +19,7 @@ async function testSubmitOrder() {
     
     const result = await submitOrder(params);
     console.log('下单成功:', result.data);
-    return result.data.orderId;
+    return result.data?.orderId || null;
   } catch (error) {
     console.error('下单失败:', error);
     return null;

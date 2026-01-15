@@ -47,8 +47,7 @@ export async function apiHandler<T>(
   try {
     apiLogger.info('API请求开始', {
       pathname: request.nextUrl.pathname,
-      method: request.method,
-      headers: Object.fromEntries(request.headers.entries())
+      method: request.method
     });
     
     // 执行具体的API处理逻辑
@@ -162,8 +161,7 @@ export async function apiHandlerWithValidation<T>(
   try {
     apiLogger.info('API请求开始(带验证)', {
       pathname: request.nextUrl.pathname,
-      method: request.method,
-      headers: Object.fromEntries(request.headers.entries())
+      method: request.method
     });
     
     // 执行参数验证

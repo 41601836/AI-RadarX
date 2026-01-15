@@ -278,7 +278,7 @@ class ApiClient {
       });
       
       const responses = await Promise.all(promises);
-      return responses.map(response => response.data);
+      return responses.map(response => response.data as T);
     } catch (error) {
       console.error('批量请求失败', error);
       throw error;

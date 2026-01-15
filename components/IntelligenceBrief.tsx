@@ -152,7 +152,7 @@ export default function IntelligenceBrief({
           throw new Error('API返回500错误');
         }
         
-        setLocalData(response.data);
+        setLocalData(response.data || null);
         success = true;
       } catch (error) {
         retryCount++;

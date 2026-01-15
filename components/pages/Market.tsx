@@ -303,7 +303,7 @@ const Market: React.FC = () => {
 const getAIDecisionText = (decision: string): string => {
   switch (decision) {
     case 'buy': return '强力买入';
-    case 'sell': return '建议止损';
+    case 'sell': return '风险回避';
     case 'hold': return '持币观望';
     default: return '未知';
   }
@@ -771,10 +771,12 @@ return (
           margin-top: 16px;
         }
 
+        /* Fincept 表格样式 */
         .dense-market-table {
           width: 100%;
           font-size: 11px;
           border-spacing: 0;
+          border-collapse: collapse;
         }
 
         .dense-market-table th {
@@ -784,6 +786,7 @@ return (
           padding: 4px 8px;
           text-align: left;
           height: 24px;
+          border: none;
         }
 
         .dense-market-table th:nth-child(n+3) {
@@ -794,6 +797,7 @@ return (
           transition: all 0.2s ease;
           cursor: pointer;
           height: 26px;
+          border: none;
         }
 
         .table-row:hover {
@@ -806,6 +810,7 @@ return (
 
         .dense-market-table td {
           padding: 4px 8px;
+          border: none;
         }
 
         .dense-market-table td:nth-child(n+3) {

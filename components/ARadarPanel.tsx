@@ -190,17 +190,17 @@ const ARadarPanel: React.FC = () => {
   });
 
   return (
-    <div className="flex flex-col gap-4 p-5 bg-slate-900/80 rounded-lg max-w-4xl mx-auto border border-slate-700">
+    <div className="flex flex-col gap-4 p-5 bg-black rounded-lg max-w-4xl mx-auto border border-slate-700">
       {/* 雷达类型切换按钮 */}
       <div className="flex gap-3 justify-center">
         <button 
-          className={`px-5 py-2 bg-slate-800/60 rounded-md cursor-pointer transition-all duration-300 ${radarType === 'emotion' ? 'bg-cyan-900/30 text-cyan-300' : 'text-slate-400 hover:bg-cyan-900/20 hover:text-cyan-300'}`}
+          className={`px-5 py-2 bg-black rounded-md cursor-pointer transition-all duration-300 ${radarType === 'emotion' ? 'bg-cyan-900/30 text-cyan-300' : 'text-slate-400 hover:bg-cyan-900/20 hover:text-cyan-300'}`}
           onClick={() => setRadarType('emotion')}
         >
           情绪雷达
         </button>
         <button 
-          className={`px-5 py-2 bg-slate-800/60 rounded-md cursor-pointer transition-all duration-300 ${radarType === 'stock' ? 'bg-cyan-900/30 text-cyan-300' : 'text-slate-400 hover:bg-cyan-900/20 hover:text-cyan-300'}`}
+          className={`px-5 py-2 bg-black rounded-md cursor-pointer transition-all duration-300 ${radarType === 'stock' ? 'bg-cyan-900/30 text-cyan-300' : 'text-slate-400 hover:bg-cyan-900/20 hover:text-cyan-300'}`}
           onClick={() => setRadarType('stock')}
         >
           个股雷达

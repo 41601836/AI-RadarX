@@ -35,6 +35,13 @@ export interface RiskPreference {
 // 定义活动标签类型
 export type ActiveTab = 'dashboard' | 'market' | 'trade' | 'strategy' | 'assets' | 'settings';
 
+// 看板布局接口
+export interface DashboardLayout {
+  isSidebarCollapsed: boolean;
+  cardLayout: Record<string, any>; // 存储卡片布局配置
+  // 可以添加更多布局相关的字段
+}
+
 // 用户组合状态接口
 export interface UserPortfolioState {
   // 模拟持仓
@@ -52,6 +59,9 @@ export interface UserPortfolioState {
   
   // 当前活动标签
   activeTab: ActiveTab;
+  
+  // 看板布局
+  dashboardLayout: DashboardLayout;
   
   // 操作方法
   // 持仓操作
@@ -73,6 +83,11 @@ export interface UserPortfolioState {
   
   // 标签操作
   setActiveTab: (tab: ActiveTab) => void;
+  
+  // 看板布局操作
+  updateDashboardLayout: (layout: Partial<DashboardLayout>) => void;
+  setSidebarCollapsed: (collapsed: boolean) => void;
+  updateCardLayout: (cardId: string, layout: any) => void;
 }
 
 // 默认状态
@@ -93,7 +108,13 @@ const defaultState: Omit<UserPortfolioState, keyof { [K in keyof UserPortfolioSt
     stopProfitRatio: 0.1
   },
   
-  activeTab: 'dashboard' // 默认显示仪表盘
+  activeTab: 'dashboard', // 默认显示仪表盘
+  
+  // 看板布局默认值
+  dashboardLayout: {
+    isSidebarCollapsed: false,
+    cardLayout: {}
+  }
 };
 
 // 静态计算衍生状态的辅助函数
@@ -378,6 +399,34 @@ export const useUserStore = create<UserPortfolioState>()(
       setActiveTab: (tab) => set((state) => ({
         ...state,
         activeTab: tab
+      })),
+      
+      // 看板布局操作
+      updateDashboardLayout: (layout) => set((state) => ({
+        ...state,
+        dashboardLayout: {
+          ...state.dashboardLayout,
+          ...layout
+        }
+      })),
+      
+      setSidebarCollapsed: (collapsed) => set((state) => ({
+        ...state,
+        dashboardLayout: {
+          ...state.dashboardLayout,
+          isSidebarCollapsed: collapsed
+        }
+      })),
+      
+      updateCardLayout: (cardId, layout) => set((state) => ({
+        ...state,
+        dashboardLayout: {
+          ...state.dashboardLayout,
+          cardLayout: {
+            ...state.dashboardLayout.cardLayout,
+            [cardId]: layout
+          }
+        }
       }))
     }),
     {

@@ -281,7 +281,7 @@ export async function fetchIndustryScores(): Promise<ApiResponse<IndustryScore[]
 export async function fetchIndustryScore(industry: string): Promise<ApiResponse<IndustryScore | null>> {
   try {
     const response = await fetchIndustryScores();
-    const industryScore = response.data.find(item => item.industry === industry) || null;
+    const industryScore = (response.data || []).find(item => item.industry === industry) || null;
     return {
       code: 200,
       msg: 'success',

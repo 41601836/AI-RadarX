@@ -120,7 +120,7 @@ export default function SearchComponent() {
       setIsIndustryLoading(true);
       try {
         const response = await fetchIndustryScores();
-        setIndustryScores(response.data);
+        setIndustryScores(response.data || []);
       } catch (error) {
         console.error('Error loading industry scores:', error);
       } finally {

@@ -21,7 +21,7 @@ async function handleTushareRequest(request: NextRequest) {
     // 解析前端请求参数
     let requestBody;
     try {
-      requestBody = await request.json();
+      requestBody = await request.json() as { api_name: string; params?: any; fields?: string };
     } catch (error) {
       throw badRequestError('Invalid JSON format in request body');
     }
@@ -84,7 +84,7 @@ async function handleTushareRequest(request: NextRequest) {
       let errorMessage = `HTTP error! status: ${response.status}`;
       if (contentType && contentType.includes('application/json')) {
         try {
-          const errorData = await response.json();
+          const errorData = await response.json() as { msg?: string };
           errorMessage = `Tushare API error: ${errorData.msg || errorMessage}`;
         } catch (jsonError) {
           // 如果JSON解析失败，尝试获取文本

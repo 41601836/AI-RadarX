@@ -186,7 +186,7 @@ const MEMORY_CONFIG = {
 };
 
 // 自定义 localStorage 存储
-const safeLocalStorage: PersistStorage<StrategyState> = {
+const safeLocalStorage: PersistStorage<any> = {
   getItem: (name: string): StorageValue<StrategyState> | null => {
     try {
       if (typeof window === 'undefined') return null;
@@ -1127,7 +1127,11 @@ export const useStrategyStore = create<StrategyState>()(
       name: 'ai-trading-terminal-strategy-store',
       version: 1,
       storage: safeLocalStorage,
-      whitelist: ['agentWeights', 'weightAdjustmentHistory', 'decisionMemory'],
+      partialize: (state) => ({
+        agentWeights: state.agentWeights,
+        weightAdjustmentHistory: state.weightAdjustmentHistory,
+        decisionMemory: state.decisionMemory,
+      }),
     }
   )
 );

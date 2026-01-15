@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { usePolling } from '../lib/hooks/usePolling';
 import { useStockContext } from '../lib/context/StockContext';
 import { StockBasicInfo, fetchStockBasicList } from '../lib/api/market';
+import Skeleton from './Skeleton';
 
 // 定义股票评分接口
 interface StockScore {
@@ -181,7 +182,24 @@ const MarketScanner: React.FC = () => {
       
       <div className="scanner-list">
         {loading ? (
-          <div className="loading">加载中...</div>
+          <div className="skeleton-container">
+            {[...Array(5)].map((_, index) => (
+              <div key={index} className="stock-item skeleton">
+                <div className="stock-rank">{index + 1}</div>
+                <div className="stock-info">
+                  <Skeleton type="text" width="80px" height="14px" />
+                  <Skeleton type="text" width="60px" height="12px" className="mt-2" />
+                </div>
+                <div className="stock-price-info">
+                  <Skeleton type="text" width="60px" height="16px" />
+                  <Skeleton type="text" width="50px" height="14px" className="mt-2" />
+                </div>
+                <div className="stock-radar">
+                  <Skeleton type="circle" width="80px" height="80px" />
+                </div>
+              </div>
+            ))}
+          </div>
         ) : topStocks.length === 0 ? (
           <div className="no-data">暂无数据</div>
         ) : (
@@ -302,29 +320,26 @@ const MarketScanner: React.FC = () => {
 
         .current-price {
           font-size: 14px;
-          color: #ffffff;
           font-weight: 500;
+          color: #ffffff;
         }
 
         .change-percent {
           font-size: 12px;
-          margin-top: 2px;
+          font-weight: 500;
         }
 
-        .change-percent.positive {
-          color: #a6e3a1;
+        .positive {
+          color: #00FF94;
         }
 
-        .change-percent.negative {
-          color: #f38ba8;
+        .negative {
+          color: #FF0066;
         }
 
         .stock-radar {
-          width: 100px;
-          height: 60px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
+          width: 80px;
+          height: 80px;
         }
 
         .radar-thumbnail {
@@ -336,6 +351,14 @@ const MarketScanner: React.FC = () => {
           text-align: center;
           padding: 20px;
           color: #94a3b8;
+        }
+
+        .skeleton-container {
+          padding: 8px 0;
+        }
+
+        .skeleton {
+          opacity: 0.7;
         }
       `}</style>
     </div>

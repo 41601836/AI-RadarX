@@ -129,7 +129,7 @@ export async function getLiquidityData(symbol: string): Promise<LiquidityData> {
       console.warn(`Real-time quote fetching exceeded latency requirement: ${calculationTime}ms`);
     }
     
-    const realTimeData = realTimeResponse.data[symbol];
+    const realTimeData = realTimeResponse.data?.[symbol];
     if (realTimeData) {
       // 计算5日平均成交额
       const fiveDayAvgTurnover = await calculateFiveDayAvgTurnover(symbol);
@@ -199,11 +199,11 @@ export async function getVolumePowerData(symbol: string): Promise<VolumePowerDat
       console.warn(`Real-time quote fetching exceeded latency requirement: ${calculationTime}ms`);
     }
     
-    const realTimeData = realTimeResponse.data[symbol];
+    const realTimeData = realTimeResponse.data?.[symbol];
     if (realTimeData) {
       // 计算5日平均成交量
       const response = await fetchHistoricalVolume(symbol, 5);
-      const volumeData = response.data;
+      const volumeData = response.data || [];
       const avgVolume = volumeData.length > 0 
         ? volumeData.reduce((sum, item) => sum + item.volume, 0) / volumeData.length 
         : realTimeData.volume;

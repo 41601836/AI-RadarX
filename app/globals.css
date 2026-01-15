@@ -93,12 +93,21 @@ input:focus, textarea:focus, select:focus {
 table {
   border-collapse: collapse !important;
   width: 100% !important;
+  font-feature-settings: "tnum" !important;
 }
 
 th, td {
   border: 1px solid #00FF00 !important;
   padding: 4px 8px !important;
+  font-feature-settings: "tnum" !important;
   text-align: left !important;
+  font-family: 'JetBrains Mono', monospace !important;
+}
+
+/* 所有数字显示使用等宽字体和tabular-nums */
+.numbers, .number, .price, .volume, .amount, .profit, .loss, .percent {
+  font-family: 'JetBrains Mono', monospace !important;
+  font-feature-settings: "tnum" !important;
 }
 
 th {

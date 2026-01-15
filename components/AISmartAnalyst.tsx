@@ -15,6 +15,7 @@ const AISmartAnalyst: React.FC<AISmartAnalystProps> = ({ stockCode, stockName })
   const [error, setError] = useState<string | null>(null);
   const [typingText, setTypingText] = useState<{ [key: string]: string }>({});
   const [isTyping, setIsTyping] = useState(false);
+  const [isHydrated, setIsHydrated] = useState(false);
   const typingSpeed = 30; // 打字机速度（毫秒/字符）
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -107,6 +108,11 @@ const AISmartAnalyst: React.FC<AISmartAnalystProps> = ({ stockCode, stockName })
     return styleMap[rating] || 'bg-gray-100 text-gray-800';
   };
 
+  // 标记组件已完成hydration
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
+
   // 当股票代码变化时重新获取分析结果
   useEffect(() => {
     if (stockCode) {
@@ -123,14 +129,14 @@ const AISmartAnalyst: React.FC<AISmartAnalystProps> = ({ stockCode, stockName })
   return (
     <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold text-gray-800">
+        <h2 className="text-xl font-bold text-[#00CCFF]">
           AI智能分析师
           {stockName && <span className="text-sm font-normal ml-2 text-gray-500">({stockName})</span>}
         </h2>
         <button 
           onClick={fetchAIAnalysis} 
           disabled={loading || isTyping}
-          className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="bg-[#00CCFF] hover:bg-[#00B8E6] text-black px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading || isTyping ? '分析中...' : '重新分析'}
         </button>
@@ -159,7 +165,7 @@ const AISmartAnalyst: React.FC<AISmartAnalystProps> = ({ stockCode, stockName })
               趋势研判
             </h3>
             <p className="text-gray-700 leading-relaxed">
-              {typingText.trendAnalysis || analysisResult.trendAnalysis}
+              {isHydrated ? (typingText.trendAnalysis || analysisResult.trendAnalysis) : analysisResult.trendAnalysis}
             </p>
           </div>
 
@@ -172,7 +178,7 @@ const AISmartAnalyst: React.FC<AISmartAnalystProps> = ({ stockCode, stockName })
               主力意图
             </h3>
             <p className="text-gray-700 leading-relaxed">
-              {typingText.mainIntention || analysisResult.mainIntention}
+              {isHydrated ? (typingText.mainIntention || analysisResult.mainIntention) : analysisResult.mainIntention}
             </p>
           </div>
 
@@ -187,13 +193,13 @@ const AISmartAnalyst: React.FC<AISmartAnalystProps> = ({ stockCode, stockName })
             </h3>
             <div className="flex items-center justify-between">
               <div className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium ${getOperationRatingStyle(analysisResult.operationRating)}`}>
-                {typingText.operationRating || getOperationRatingText(analysisResult.operationRating)}
+                {isHydrated ? (typingText.operationRating || getOperationRatingText(analysisResult.operationRating)) : getOperationRatingText(analysisResult.operationRating)}
               </div>
               <div className="flex items-center">
                 <span className="text-sm text-gray-500 mr-2">置信度：</span>
                 <div className="w-32 bg-gray-200 rounded-full h-4">
                   <div 
-                    className="bg-blue-500 h-4 rounded-full" 
+                    className="bg-[#00CCFF] h-4 rounded-full" 
                     style={{ width: `${analysisResult.confidenceScore}%` }}
                   ></div>
                 </div>

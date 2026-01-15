@@ -11,7 +11,13 @@ import { configureStopRule } from '@/lib/api/risk/stopRule';
  */
 async function handleRiskStopRuleConfigRequest(request: NextRequest) {
   // 解析请求体
-  const body = await request.json();
+  const body = await request.json() as { 
+    stockCode: string; 
+    stopType: 'stopLoss' | 'stopProfit'; 
+    ruleType: 'fixed' | 'moving' | 'ma'; 
+    value: number; 
+    isEnabled: boolean 
+  };
   
   // 验证必要参数
   if (!body.stockCode) {

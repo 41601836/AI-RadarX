@@ -72,7 +72,7 @@ class SimulatedPositionStore {
         getTushareDailyData(stockCode, undefined, undefined)
       ]);
 
-      const stockName = chipData.data.stockName;
+      const stockName = chipData.data?.stockName || '未知股票';
       const currentPrice = stockData[0]?.close || price;
 
       // 更新可用资金
@@ -93,8 +93,8 @@ class SimulatedPositionStore {
           marketValue: totalShares * currentPrice,
           profitLoss: totalShares * (currentPrice - newAvgCost),
           profitLossRatio: (currentPrice - newAvgCost) / newAvgCost,
-          chipSupportPrice: chipData.data.supportPrice,
-          stopLossWarning: this.checkStopLossWarning(currentPrice, chipData.data.supportPrice)
+          chipSupportPrice: chipData.data?.supportPrice || price,
+          stopLossWarning: this.checkStopLossWarning(currentPrice, chipData.data?.supportPrice || price)
         };
         
         this.positions.set(stockCode, updatedPos);
@@ -112,8 +112,8 @@ class SimulatedPositionStore {
           marketValue: shares * currentPrice,
           profitLoss: shares * (currentPrice - price),
           profitLossRatio: (currentPrice - price) / price,
-          chipSupportPrice: chipData.data.supportPrice,
-          stopLossWarning: this.checkStopLossWarning(currentPrice, chipData.data.supportPrice)
+          chipSupportPrice: chipData.data?.supportPrice || price,
+          stopLossWarning: this.checkStopLossWarning(currentPrice, chipData.data?.supportPrice || price)
         };
         
         this.positions.set(stockCode, newPos);
@@ -204,7 +204,7 @@ class SimulatedPositionStore {
         ]);
 
         const currentPrice = stockData[0]?.close || position.currentPrice;
-        const chipSupportPrice = chipData.data.supportPrice;
+        const chipSupportPrice = chipData.data?.supportPrice || position.currentPrice;
         const stopLossWarning = this.checkStopLossWarning(currentPrice, chipSupportPrice);
 
         // 更新持仓数据

@@ -2,6 +2,9 @@
 import { AggregatedStockData, AIAnalysisResult } from './index';
 import { Logger, logger } from '../../utils/logger';
 
+// 重新导出AIAnalysisResult类型
+export type { AIAnalysisResult };
+
 // 创建AI专用Logger实例
 const aiLogger = logger.withCategory('AI');
 

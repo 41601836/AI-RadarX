@@ -70,7 +70,7 @@ export async function fetchKLineData(
     });
     
     // 将 Tushare K 线格式映射为 Fincept OHLCV 格式
-    const mappedData = mapTushareToOHLCV(response.data.data);
+    const mappedData = response.data?.data ? mapTushareToOHLCV(response.data.data) : generateMockKLineData();
     
     // 返回符合 ApiResponse 格式的数据
     return {
@@ -116,7 +116,13 @@ export async function fetchStockBasicList(): Promise<ApiResponse<PaginationRespo
     // 返回符合 ApiResponse 格式的数据
     return {
       ...response,
-      data: response.data.data
+      data: response.data?.data || {
+        list: [],
+        total: 0,
+        pageNum: 1,
+        pageSize: 10,
+        pages: 0
+      }
     };
   } catch (error) {
     console.error('Error fetching stock basic list:', error);

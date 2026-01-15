@@ -173,7 +173,7 @@ async function fetchXuanguubaoNews(limit: number): Promise<any[]> {
     }
     
     // 选股宝返回的是JSON
-    const data = await response.json();
+    const data = await response.json() as any;
     
     // 提取需要的字段
     const newsList = data.data.items

@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useStrategyStore } from '../lib/store/useStrategyStore';
+import { useUserStore } from '../lib/store/user-portfolio';
+import { exportAndDownloadPostMortem } from '../lib/utils/exporter';
 
 // 用于检查组件是否已在客户端挂载的钩子
 const useHasMounted = () => {
@@ -38,18 +40,22 @@ const StrategyConsole: React.FC<StrategyConsoleProps> = ({
   // 获取相关的日志数据
   const logs = stockCode 
     ? getThoughtLogsByStock(stockCode).map(log => ({
+        id: log.id,
         agent: log.agent,
         message: log.message,
         timestamp: log.timestamp,
         type: log.type,
-        confidence: log.confidence
+        confidence: log.confidence,
+        stockCode: log.stockCode
       }))
     : thoughtLogs.map(log => ({
+        id: log.id,
         agent: log.agent,
         message: log.message,
         timestamp: log.timestamp,
         type: log.type,
-        confidence: log.confidence
+        confidence: log.confidence,
+        stockCode: log.stockCode
       }));
   const [displayedLogs, setDisplayedLogs] = useState<Array<{ 
     agent: string; 
@@ -65,24 +71,33 @@ const StrategyConsole: React.FC<StrategyConsoleProps> = ({
 
   // 打字机效果实现
   useEffect(() => {
-    if (currentIndex < logs.length) {
-      const currentLog = logs[currentIndex];
-      if (charIndex < currentLog.message.length) {
-        const timer = setTimeout(() => {
+    // 只处理新加入的日志
+    if (displayedLogs.length < logs.length) {
+      const newIndex = displayedLogs.length;
+      const currentLog = logs[newIndex];
+      
+      // 重置字符索引以开始显示新日志
+      setCurrentIndex(newIndex);
+      setCharIndex(0);
+      
+      const typeWriter = () => {
+        // 确保currentIndex仍然指向新日志（防止并发更新）
+        if (currentIndex === newIndex && charIndex < currentLog.message.length) {
           setCharIndex(charIndex + 1);
-        }, 20); // 打字机速度
-        return () => clearTimeout(timer);
-      } else {
-        // 当前日志完全显示后，添加到显示列表并开始下一条
-        setDisplayedLogs(prev => [...prev, {
-          ...currentLog,
-          fullMessage: currentLog.message
-        }]);
-        setCurrentIndex(currentIndex + 1);
-        setCharIndex(0);
-      }
+          setTimeout(typeWriter, 20); // 打字机速度
+        } else if (currentIndex === newIndex && charIndex >= currentLog.message.length) {
+          // 当前日志完全显示后，添加到显示列表
+          setDisplayedLogs(prev => [...prev, {
+            ...currentLog,
+            fullMessage: currentLog.message
+          }]);
+          setCharIndex(0);
+        }
+      };
+      
+      typeWriter();
     }
-  }, [charIndex, currentIndex, logs]);
+  }, [logs, displayedLogs.length, currentIndex, charIndex]);
 
   // 自动滚动到底部
   useEffect(() => {
@@ -124,13 +139,21 @@ const StrategyConsole: React.FC<StrategyConsoleProps> = ({
   return (
     <div className="strategy-console">
       <div className="console-header">
-        <span className="console-title">AI 多智能体会诊终端</span>
-        <div className="console-dots">
-          <span className="dot"></span>
-          <span className="dot"></span>
-          <span className="dot"></span>
+          <span className="console-title">AI 多智能体会诊终端</span>
+          <div className="flex gap-4 items-center">
+            <button 
+              className="export-button"
+              onClick={() => exportAndDownloadPostMortem(logs.map(log => ({...log, timestamp: new Date(log.timestamp)})), useUserStore.getState().positions)}
+            >
+              导出复盘报告
+            </button>
+            <div className="console-dots">
+              <span className="dot"></span>
+              <span className="dot"></span>
+              <span className="dot"></span>
+            </div>
+          </div>
         </div>
-      </div>
       <div className="console-body" ref={consoleBodyRef}>
         {/* 显示已完成的日志 */}
         {displayedLogs.map((log, index) => {
@@ -354,6 +377,24 @@ const StrategyConsole: React.FC<StrategyConsoleProps> = ({
           font-size: 12px;
           font-weight: 600;
           text-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+        }
+        
+        .export-button {
+          background: transparent;
+          border: none;
+          color: #89dceb;
+          font-family: 'Courier New', 'Monaco', 'Consolas', monospace;
+          font-size: 12px;
+          font-weight: 600;
+          cursor: pointer;
+          padding: 4px 8px;
+          transition: all 0.3s ease;
+          text-shadow: 0 0 10px rgba(137, 220, 235, 0.8);
+        }
+        
+        .export-button:hover {
+          color: #c4a7e7;
+          text-shadow: 0 0 15px rgba(196, 167, 231, 0.9);
         }
       `}</style>
     </div>

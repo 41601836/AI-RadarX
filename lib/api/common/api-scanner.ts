@@ -1,9 +1,9 @@
 // API全接口扫描器 - 用于验证后端服务可用性
-import { ApiResponse } from './response.ts';
-import { ApiError } from './errors.ts';
-import { apiClient } from '../client.ts';
-import { fetchChipDistribution } from '../chip/distribution.ts';
-import { fetchMarketData } from '../market/data.ts';
+import { ApiResponse } from './response';
+import { ApiError } from './errors';
+import { apiClient } from '../client';
+import { fetchChipDistribution } from '../chip/distribution';
+import { fetchMarketData } from '../market/data';
 
 // 定义要测试的API端点
 interface ApiEndpoint {

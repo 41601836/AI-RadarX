@@ -1,7 +1,7 @@
 // 股票游资席位API
 import { successResponse } from '../common/response';
 import { ApiResponse } from '../common/response';
-import { stockCodeFormatError, noHeatFlowDataError } from '../common/errors';
+import { stockCodeFormatError, noHotMoneyRecordError } from '../common/errors';
 import { formatDateTime, isValidStockCode } from '../common/utils'; // 导入通用工具函数
 import { SeatTag, getSeatTags } from './seatTags'; // 导入席位标签库
 
@@ -260,7 +260,7 @@ export async function fetchHeatFlowStockSeat(
     
     // 如果没有龙虎榜数据，抛出错误
     if (lhbDataList.length === 0) {
-      throw noHeatFlowDataError();
+      throw noHotMoneyRecordError();
     }
     
     // 初始化结果数据
@@ -375,7 +375,7 @@ export async function fetchHeatFlowStockSeat(
     
     // 如果没有游资数据，抛出特定错误
     if (resultData.hotSeatList.length === 0) {
-      throw noHeatFlowDataError();
+      throw noHotMoneyRecordError();
     }
     
     return successResponse(resultData, '股票游资席位数据获取成功');

@@ -30,7 +30,7 @@ export async function fetchAccountRiskAssessment(): Promise<ApiResponse<AccountR
     const response = await apiGet<AccountRiskAssessmentData>('/risk/account/assessment');
     
     // 如果账户不存在，返回特定错误
-    if (!response.data.accountId) {
+    if (!response.data || !response.data.accountId) {
       throw accountNotExistError();
     }
     
