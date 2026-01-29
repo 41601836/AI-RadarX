@@ -37,7 +37,7 @@ function getTushareToken(): string | null {
   if (process.env.NEXT_PUBLIC_API_MOCK === 'true') {
     return null;
   }
-  
+
   // 仅从TUSHARE_TOKEN获取（服务端可用），客户端不再直接使用Token
   const token = process.env.TUSHARE_TOKEN;
   if (!token) {
@@ -63,16 +63,16 @@ function setCache<T>(apiName: string, params: Record<string, any>, data: T): voi
 function getCache<T>(apiName: string, params: Record<string, any>): T | null {
   const key = generateCacheKey(apiName, params);
   const cacheItem = cache.get(key);
-  
+
   if (!cacheItem) {
     return null;
   }
-  
+
   if (Date.now() > cacheItem.expiryTime) {
     cache.delete(key); // 删除过期缓存
     return null;
   }
-  
+
   return cacheItem.data;
 }
 
@@ -92,9 +92,9 @@ export async function checkTushareConnection(): Promise<TushareStatus> {
   try {
     // 检查是否在浏览器环境
     const isBrowser = typeof window !== 'undefined';
-    
+
     let response, result;
-    
+
     if (isBrowser) {
       // 浏览器环境：通过本地代理API检查连接
       response = await fetch('/api/tushare', {
@@ -108,9 +108,9 @@ export async function checkTushareConnection(): Promise<TushareStatus> {
           fields: 'ts_code,name',
         }),
       });
-      
+
       result = await response.json();
-      
+
       // 处理积分不足或Token缺失的情况，引导前端切换到Mock逻辑
       if (response.status === 402 || response.status === 500) {
         throw new Error(result.msg || 'Tushare API unavailable');
@@ -124,38 +124,33 @@ export async function checkTushareConnection(): Promise<TushareStatus> {
         params: { ts_code: '600000.SH' },
         fields: 'ts_code,name',
       };
-      
+
       response = await fetch(TUSHARE_BASE_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(requestParams),
-        // 开发环境下绕过SSL证书验证（生产环境应移除）
-        ...(process.env.NODE_ENV === 'development' && {
-          // 使用类型断言解决TypeScript类型检查问题
-          agent: new (require('https').Agent)({ rejectUnauthorized: false }) as any,
-        }),
-      } as any);
-      
+      });
+
       result = await response.json();
     }
-    
+
     if (!response.ok || result.code !== 0) {
       throw new Error(`Tushare API error: ${result.msg || `Request failed with status ${response.status}`}`);
     }
-    
+
     // 更新连接状态为成功
     tushareStatus = {
       connected: true,
       isUsingMock: false,
       lastCheckTime: Date.now()
     };
-    
+
     return tushareStatus;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : '未知错误';
-    
+
     // 更新连接状态为失败
     tushareStatus = {
       connected: false,
@@ -163,7 +158,7 @@ export async function checkTushareConnection(): Promise<TushareStatus> {
       lastCheckTime: Date.now(),
       error: errorMessage
     };
-    
+
     return tushareStatus;
   }
 }
@@ -177,7 +172,7 @@ export function getTushareStatus(): TushareStatus {
 export async function tushareRequest<T>(apiName: string, params: Record<string, any>): Promise<T> {
   // 检查是否在浏览器环境
   const isBrowser = typeof window !== 'undefined';
-  
+
   // 浏览器环境：转发到本地代理API
   if (isBrowser) {
     try {
@@ -192,25 +187,25 @@ export async function tushareRequest<T>(apiName: string, params: Record<string, 
           fields: '*',
         }),
       });
-      
+
       const result = await response.json();
-      
+
       // 处理积分不足或Token缺失的情况，引导前端切换到Mock逻辑
       if (response.status === 402 || response.status === 500) {
         throw new ApiError(ErrorCode.SERVICE_UNAVAILABLE, result.msg || 'Tushare API unavailable');
       }
-      
+
       if (!response.ok || result.code !== 0) {
         throw new ApiError(ErrorCode.SERVICE_UNAVAILABLE, result.msg || `Tushare proxy request failed with status ${response.status}`);
       }
-      
+
       // 更新连接状态为成功
       tushareStatus = {
         connected: true,
         isUsingMock: false,
         lastCheckTime: Date.now()
       };
-      
+
       return result.data as T;
     } catch (error) {
       if (error instanceof ApiError) {
@@ -234,10 +229,10 @@ export async function tushareRequest<T>(apiName: string, params: Record<string, 
       throw apiError;
     }
   }
-  
+
   // 服务端环境：直接请求Tushare API
   const token = getTushareToken();
-  
+
   // 如果没有token或处于Mock模式，直接抛出错误让调用者处理回退
   if (!token) {
     const error = new ApiError(ErrorCode.INTERNAL_SERVER_ERROR, 'TUSHARE_TOKEN is not configured on server');
@@ -250,7 +245,7 @@ export async function tushareRequest<T>(apiName: string, params: Record<string, 
     };
     throw error;
   }
-  
+
   try {
     // 构建Tushare API请求参数
     const requestParams = {
@@ -259,7 +254,7 @@ export async function tushareRequest<T>(apiName: string, params: Record<string, 
       params,
       fields: '*',
     };
-    
+
     const response = await fetch(TUSHARE_BASE_URL, {
       method: 'POST',
       headers: {
@@ -272,18 +267,18 @@ export async function tushareRequest<T>(apiName: string, params: Record<string, 
         agent: new (require('https').Agent)({ rejectUnauthorized: false }) as any,
       }),
     } as any);
-    
+
     // 处理402(积分不足)错误
     if (response.status === 402) {
       throw new ApiError(ErrorCode.SERVICE_UNAVAILABLE, 'Tushare API credits insufficient');
     }
-    
+
     if (!response.ok) {
       throw new ApiError(ErrorCode.SERVICE_UNAVAILABLE, `Tushare API request failed with status ${response.status}`);
     }
-    
+
     const result = await response.json();
-    
+
     if (result.code !== 0) {
       // 检查是否是积分不足的错误
       if (result.msg && result.msg.includes('积分')) {
@@ -291,14 +286,14 @@ export async function tushareRequest<T>(apiName: string, params: Record<string, 
       }
       throw new ApiError(ErrorCode.SERVICE_UNAVAILABLE, `Tushare API error: ${result.msg}`);
     }
-    
+
     // 更新连接状态为成功
     tushareStatus = {
       connected: true,
       isUsingMock: false,
       lastCheckTime: Date.now()
     };
-    
+
     return result.data as T;
   } catch (error) {
     if (error instanceof ApiError) {
@@ -326,19 +321,19 @@ export async function tushareRequest<T>(apiName: string, params: Record<string, 
 // 获取历史日线数据
 export async function getTushareDailyData(stockCode: string, startDate?: string, endDate?: string): Promise<any[]> {
   // 转换股票代码格式：SH600000 -> 600000.SH
-  const formattedCode = stockCode.startsWith('SH') 
+  const formattedCode = stockCode.startsWith('SH')
     ? `${stockCode.slice(2)}.SH`
     : stockCode.startsWith('SZ')
-    ? `${stockCode.slice(2)}.SZ`
-    : stockCode;
-  
+      ? `${stockCode.slice(2)}.SZ`
+      : stockCode;
+
   const params: Record<string, any> = {
     ts_code: formattedCode,
   };
-  
+
   if (startDate) params.start_date = startDate;
   if (endDate) params.end_date = endDate;
-  
+
   const data = await tushareRequest<any>('daily', params);
   return data.items;
 }
@@ -346,44 +341,44 @@ export async function getTushareDailyData(stockCode: string, startDate?: string,
 // 获取股票基本信息
 export async function getTushareStockBasic(stockCode: string): Promise<any> {
   // 转换股票代码格式：SH600000 -> 600000.SH
-  const formattedCode = stockCode.startsWith('SH') 
+  const formattedCode = stockCode.startsWith('SH')
     ? `${stockCode.slice(2)}.SH`
     : stockCode.startsWith('SZ')
-    ? `${stockCode.slice(2)}.SZ`
-    : stockCode;
-  
+      ? `${stockCode.slice(2)}.SZ`
+      : stockCode;
+
   const params = { ts_code: formattedCode };
   const apiName = 'stock_basic';
-  
+
   // 检查缓存
   const cachedData = getCache<{ items: any[] }>(apiName, params);
   if (cachedData) {
     return cachedData.items[0] || null;
   }
-  
+
   // 缓存不存在或已过期，调用API
   const data = await tushareRequest<any>(apiName, params);
-  
+
   // 设置缓存
   setCache(apiName, params, data);
-  
+
   return data.items[0] || null;
 }
 
 // 获取股票行情数据
 export async function getTushareStockQuote(stockCode: string): Promise<any> {
   // 转换股票代码格式：SH600000 -> 600000.SH
-  const formattedCode = stockCode.startsWith('SH') 
+  const formattedCode = stockCode.startsWith('SH')
     ? `${stockCode.slice(2)}.SH`
     : stockCode.startsWith('SZ')
-    ? `${stockCode.slice(2)}.SZ`
-    : stockCode;
-  
+      ? `${stockCode.slice(2)}.SZ`
+      : stockCode;
+
   const data = await tushareRequest<any>('daily', {
     ts_code: formattedCode,
     limit: 1,
   });
-  
+
   return data.items[0] || null;
 }
 

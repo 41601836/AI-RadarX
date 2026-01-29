@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 简化的全局样式 - 为了调试 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  background-color: #000000;
+  color: #ffffff;
+  height: 100%;
+  width: 100%;
+}
+
+#__next {
+  height: 100%;
+  width: 100%;
+}

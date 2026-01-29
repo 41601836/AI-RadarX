@@ -165,23 +165,32 @@ const StrategyConsole: React.FC<StrategyConsoleProps> = ({
               style={{ 
                 backgroundColor: typeStyle.bgColor,
                 borderLeft: `3px solid ${typeStyle.color}`,
-                padding: '8px 12px',
                 marginBottom: '4px'
               }}
             >
-              <span 
-                className="log-agent" 
-                style={{ color: getAgentColor(log.agent) }}
-              >
-                [{log.agent}]
-              </span>
-              <span className="log-message">{log.fullMessage}</span>
-              {log.confidence && (
-                <span className="log-confidence">
-                  ({Math.round(log.confidence * 100)}%)
+              <div className="log-header">
+                <span 
+                  className="log-agent" 
+                  style={{ color: '#00CCFF' }}
+                >
+                  [{log.agent}]
                 </span>
-              )}
-              <span className="log-time">{hasMounted ? log.timestamp.toLocaleTimeString() : ''}</span>
+                {log.confidence && (
+                  <span className="log-confidence">
+                    ({Math.round(log.confidence * 100)}%)
+                  </span>
+                )}
+                <span className="log-time">{hasMounted ? log.timestamp.toLocaleTimeString() : ''}</span>
+              </div>
+              <div className="log-content">
+                <span className="log-message">{log.fullMessage}</span>
+              </div>
+              {/* 推理块下方的微型按钮 */}
+              <div className="log-actions">
+                <button className="action-button" title="复制">COPY</button>
+                <button className="action-button" title="导出">EXPORT</button>
+                <button className="action-button" title="反馈">FEEDBACK</button>
+              </div>
             </div>
           );
         })}
@@ -221,8 +230,8 @@ const StrategyConsole: React.FC<StrategyConsoleProps> = ({
 
       <style jsx>{`
         .strategy-console {
-          background: #0f172a;
-          border-radius: 8px;
+          background: #0A0A0A;
+          border: 1px solid rgba(255,255,255,0.1);
           height: 100%;
           display: flex;
           flex-direction: column;
@@ -230,18 +239,19 @@ const StrategyConsole: React.FC<StrategyConsoleProps> = ({
         }
 
         .console-header {
-          background: #1e1e2e;
-          padding: 12px 16px;
+          background: #000;
+          border-bottom: 1px solid rgba(255,255,255,0.1);
+          padding: 10px 14px;
           display: flex;
           justify-content: space-between;
           align-items: center;
         }
 
         .console-title {
-          color: #89dceb;
+          color: #00CCFF;
           font-size: 14px;
           font-weight: 600;
-          text-shadow: 0 0 10px rgba(137, 220, 235, 0.5);
+          font-family: 'JetBrains Mono', monospace !important;
         }
 
         .console-dots {
@@ -283,39 +293,35 @@ const StrategyConsole: React.FC<StrategyConsoleProps> = ({
 
         .console-body {
           flex: 1;
-          padding: 16px;
+          padding: 12px;
           overflow-y: auto;
-          font-family: 'Courier New', 'Monaco', 'Consolas', monospace;
+          font-family: 'JetBrains Mono', monospace !important;
           font-size: 13px;
-          line-height: 1.6;
-          background: linear-gradient(180deg, #0f172a 0%, #1e1e2e 100%);
+          line-height: 1.5;
+          background-color: #0A0A0A;
         }
 
         /* 自定义滚动条 */
         .console-body::-webkit-scrollbar {
-          width: 8px;
+          width: 6px;
         }
 
         .console-body::-webkit-scrollbar-track {
-          background: #1e1e2e;
-          border-radius: 4px;
+          background: rgba(255,255,255,0.05);
         }
 
         .console-body::-webkit-scrollbar-thumb {
-          background: #313244;
-          border-radius: 4px;
+          background: rgba(255,255,255,0.2);
         }
 
         .console-body::-webkit-scrollbar-thumb:hover {
-          background: #475569;
-          box-shadow: 0 0 10px rgba(137, 220, 235, 0.3);
+          background: rgba(0,204,255,0.5);
         }
 
         .log-entry {
           margin-bottom: 12px;
-          display: flex;
-          gap: 12px;
-          align-items: flex-start;
+          border: 1px solid rgba(255,255,255,0.1);
+          background-color: #000;
           animation: fadeIn 0.3s ease;
         }
 
@@ -330,23 +336,65 @@ const StrategyConsole: React.FC<StrategyConsoleProps> = ({
           }
         }
 
+        .log-header {
+          display: flex;
+          gap: 10px;
+          align-items: center;
+          padding: 6px 10px;
+          background-color: rgba(0,204,255,0.05);
+          border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
         .log-agent {
           font-weight: 700;
-          min-width: 100px;
-          text-shadow: 0 0 5px currentColor;
+          color: #00CCFF !important;
+          font-family: 'JetBrains Mono', monospace !important;
         }
 
         .log-message {
-          color: #e2e8f0;
+          color: #FFFFFF !important;
           flex: 1;
           word-break: break-word;
+          font-family: 'JetBrains Mono', monospace !important;
+          font-size: 12px;
+          line-height: 1.5;
+        }
+
+        .log-content {
+          padding: 10px;
         }
 
         .log-time {
-          color: #6b7280;
+          color: rgba(255,255,255,0.5);
           font-size: 11px;
           white-space: nowrap;
           margin-left: auto;
+          font-family: 'JetBrains Mono', monospace !important;
+        }
+
+        .log-actions {
+          display: flex;
+          gap: 2px;
+          padding: 4px 10px;
+          background-color: rgba(255,255,255,0.02);
+          border-top: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .action-button {
+          background-color: #000;
+          color: rgba(255,255,255,0.6);
+          border: 1px solid rgba(255,255,255,0.1);
+          padding: 2px 6px;
+          font-size: 10px;
+          cursor: pointer;
+          transition: all 0.2s;
+          font-family: 'JetBrains Mono', monospace !important;
+        }
+
+        .action-button:hover {
+          background-color: rgba(0,204,255,0.1);
+          color: #00CCFF;
+          border-color: rgba(0,204,255,0.5);
         }
 
         .typing-cursor {

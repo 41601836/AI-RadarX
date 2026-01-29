@@ -599,17 +599,20 @@ const styles = `
   .positions-list {
     flex: 1;
     overflow-y: auto;
+    background-color: #0A0A0A;
+    border: 1px solid rgba(255,255,255,0.1);
   }
 
   .position-item {
-    padding: 8px;
-    border-bottom: 1px solid #333;
+    padding: 6px 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    background-color: #0A0A0A;
   }
 
   .position-info {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
   }
 
   .stock-info {
@@ -621,31 +624,36 @@ const styles = `
   .stock-code {
     font-weight: bold;
     color: #FFFFFF;
+    font-family: 'JetBrains Mono', monospace !important;
+    font-variant-numeric: tabular-nums !important;
   }
 
   .stock-name {
-    color: #CCCCCC;
+    color: rgba(255,255,255,0.7);
+    font-family: 'JetBrains Mono', monospace !important;
   }
 
   .edit-btn {
     padding: 2px 6px;
     font-size: 12px;
-    background-color: #000000;
+    background-color: #000;
     color: #00FF00;
-    border: 1px solid #00FF00;
+    border: 1px solid rgba(255,255,255,0.1);
     cursor: pointer;
+    font-family: 'JetBrains Mono', monospace !important;
   }
 
   .edit-btn:hover {
-    background-color: #00FF00;
-    color: #000000;
+    background-color: rgba(0,255,0,0.1);
+    color: #00FF00;
+    border-color: #00FF00;
   }
 
   .position-details {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 8px;
-    padding: 8px 0;
+    gap: 6px;
+    padding: 6px 0;
   }
 
   .detail-item {
@@ -655,14 +663,24 @@ const styles = `
   }
 
   .detail-label {
-    font-size: 12px;
-    color: #888888;
+    font-size: 11px;
+    color: rgba(255,255,255,0.5);
+    font-family: 'JetBrains Mono', monospace !important;
   }
 
   .detail-value {
-    font-size: 14px;
+    font-size: 13px;
     font-weight: bold;
     color: #FFFFFF;
+    font-family: 'JetBrains Mono', monospace !important;
+    font-variant-numeric: tabular-nums !important;
+  }
+
+  /* 盈利数值呼吸效果 */
+  .detail-item.positive .detail-value {
+    color: #00FF94 !important;
+    filter: drop-shadow(0 0 8px #00FF94) !important;
+    animation: pulse 2s infinite;
   }
 
   /* 编辑表单样式 */

@@ -32,23 +32,16 @@ interface StockWithStrength extends StockBasicInfo {
 const Market: React.FC = () => {
   // 添加客户端仅渲染模式
   const [mounted, setMounted] = useState(false);
-  
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-  
-  // 在组件挂载前不渲染任何内容
-  if (!mounted) return null;
-  
+
   const [categories, setCategories] = useState<MarketCategory[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('main');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [processingStock, setProcessingStock] = useState<string | null>(null); // 记录当前正在处理的股票代码
-  
+
   // 强度计算器实例
   const [strengthCalculators, setStrengthCalculators] = useState<Map<string, RealTimeIntradayStrengthCalculator>>(new Map());
-  
+
   // 获取当前股票上下文
   const { setCurrentTicker } = useStockContext();
   // 获取用户状态管理
@@ -56,28 +49,28 @@ const Market: React.FC = () => {
   // 获取策略Store
   const { getStockConsensus, runConsensus } = useStrategyStore();
   // 获取市场数据Store
-  const { 
-    marketData, 
-    watchlist, 
-    addToWatchlist, 
-    removeFromWatchlist, 
-    startRealtimeUpdates, 
-    stopRealtimeUpdates 
+  const {
+    marketData,
+    watchlist,
+    addToWatchlist,
+    removeFromWatchlist,
+    startRealtimeUpdates,
+    stopRealtimeUpdates
   } = useMarketStore();
-  
+
   // 处理股票点击事件 - 使用useCallback优化
   const handleStockClick = useCallback(async (stock: StockWithStrength) => {
     try {
       // 设置处理中状态
       setProcessingStock(stock.ts_code);
-      
+
       // 1. 通过StockContext切换全局当前股票
       setCurrentTicker(stock);
-      
+
       // 2. 切换到策略页面
       setActiveTab('strategy');
-      
-      // 3. 触发AI共识分析（自动推理）
+
+      // 3. 触发AI共识分析(自动推理)
       await runConsensus(stock.ts_code, stock.name);
     } catch (error) {
       console.error('处理股票点击事件失败:', error);
@@ -88,12 +81,12 @@ const Market: React.FC = () => {
       setProcessingStock(null);
     }
   }, [setCurrentTicker, setActiveTab, runConsensus]);
-  
+
   // 处理自选股添加/移除
   const handleWatchlistToggle = useCallback((stock: StockWithStrength, e: React.MouseEvent) => {
     e.stopPropagation();
     const isInWatchlist = watchlist.some(item => item.symbol === stock.ts_code);
-    
+
     if (isInWatchlist) {
       removeFromWatchlist(stock.ts_code);
     } else {
@@ -110,6 +103,13 @@ const Market: React.FC = () => {
     console.log('Lightning trade for:', stock.ts_code, stock.name);
     // TODO: 实现闪电下单逻辑
   }, []);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // 在组件挂载前不渲染任何内容
+  if (!mounted) return null;
 
   // 检查本地API连接状态
   const checkLocalApiConnection = async (): Promise<boolean> => {
@@ -137,7 +137,7 @@ const Market: React.FC = () => {
         // 检查数据健康状态
         const isLocalApiConnected = await checkLocalApiConnection();
         let stocks: StockWithStrength[] = [];
-        
+
         if (isLocalApiConnected) {
           // 在线模式：调用Java后端API
           try {
@@ -170,17 +170,17 @@ const Market: React.FC = () => {
           ];
           stocks = mockStocks;
         }
-        
+
         // 初始分类
         categorizeStocks(stocks);
-        
+
         // 初始化强度计算器
         const calculators = new Map<string, RealTimeIntradayStrengthCalculator>();
         stocks.forEach(stock => {
           calculators.set(stock.ts_code, new RealTimeIntradayStrengthCalculator());
         });
         setStrengthCalculators(calculators);
-        
+
       } catch (error) {
         console.error('Error loading stock data:', error);
         setError(`加载股票数据失败: ${error instanceof Error ? error.message : '未知错误'}`);
@@ -196,12 +196,12 @@ const Market: React.FC = () => {
   useEffect(() => {
     const currentStocks = getCurrentCategoryStocks();
     const symbols = currentStocks.map(s => s.ts_code);
-    
+
     if (symbols.length > 0) {
       // 启动实时更新（每3秒）
       startRealtimeUpdates(symbols);
     }
-    
+
     return () => {
       stopRealtimeUpdates();
     };
@@ -222,7 +222,7 @@ const Market: React.FC = () => {
       // 检查是否在自选股中
       // 注意：这里我们不直接在这里判断，因为watchlist是动态的
       // 我们会在渲染时或getCurrentCategoryStocks中合并状态
-      
+
       if (stock.market.includes('SH') || stock.market.includes('SZ')) {
         categories[1].stocks.push(stock); // 主板
       }
@@ -246,29 +246,29 @@ const Market: React.FC = () => {
   // 获取当前分类的股票（合并实时数据）
   const getCurrentCategoryStocks = useCallback(() => {
     let stocks: StockWithStrength[] = [];
-    
+
     if (selectedCategory === 'watchlist') {
       // 从所有分类中查找自选股，或者如果后端支持直接获取自选股详情更好
       // 这里我们遍历所有分类来构建自选股列表（简化版）
       // 实际应用中应该维护一个所有股票的Map
       const allStocks = categories.flatMap(c => c.id !== 'watchlist' ? c.stocks : []);
       stocks = allStocks.filter(s => watchlist.some(w => w.symbol === s.ts_code));
-      
+
       // 去重
       stocks = Array.from(new Set(stocks.map(s => s.ts_code)))
         .map(code => stocks.find(s => s.ts_code === code)!);
-        
+
     } else {
       const category = categories.find(cat => cat.id === selectedCategory);
       stocks = category ? category.stocks : [];
     }
-    
+
     // 合并实时数据
     return stocks.map(stock => {
       const quote = marketData.quotes[stock.ts_code];
       const isInWatchlist = watchlist.some(w => w.symbol === stock.ts_code);
       const consensus = getStockConsensus(stock.ts_code);
-      
+
       return {
         ...stock,
         price: quote?.price || stock.price, // 优先使用实时数据
@@ -300,234 +300,234 @@ const Market: React.FC = () => {
   };
 
   // 获取AI评级文本
-const getAIDecisionText = (decision: string): string => {
-  switch (decision) {
-    case 'buy': return '强力买入';
-    case 'sell': return '风险回避';
-    case 'hold': return '持币观望';
-    default: return '未知';
+  const getAIDecisionText = (decision: string): string => {
+    switch (decision) {
+      case 'buy': return '强力买入';
+      case 'sell': return '风险回避';
+      case 'hold': return '持币观望';
+      default: return '未知';
+    }
+  };
+
+  // 获取强度颜色
+  const getStrengthColor = (strength: number): string => {
+    if (strength >= 0.8) return '#ef4444'; // 红色
+    if (strength >= 0.6) return '#f59e0b'; // 橙色
+    if (strength >= 0.4) return '#eab308'; // 黄色
+    if (strength >= 0.2) return '#84cc16'; // 绿色
+    return '#22c55e'; // 深绿色
+  };
+
+  // FPS监控组件
+  const FPSCounter = () => {
+    const fpsRef = useRef(0);
+    const lastTimeRef = useRef(performance.now());
+    const frameCountRef = useRef(0);
+    const warnThreshold = 55; // 低于此FPS时显示警告
+
+    useEffect(() => {
+      const measureFPS = (time: number) => {
+        frameCountRef.current++;
+        const secondsPassed = (time - lastTimeRef.current) / 1000;
+
+        if (secondsPassed >= 1) {
+          fpsRef.current = frameCountRef.current;
+          frameCountRef.current = 0;
+          lastTimeRef.current = time;
+
+          // 如果FPS低于阈值，在控制台显示警告
+          if (fpsRef.current < warnThreshold) {
+            console.warn(`Market页面FPS较低: ${fpsRef.current}fps，可能影响用户体验`);
+          }
+        }
+
+        requestAnimationFrame(measureFPS);
+      };
+
+      const animationFrameId = requestAnimationFrame(measureFPS);
+
+      return () => cancelAnimationFrame(animationFrameId);
+    }, []);
+
+    return null;
+  };
+
+  // 虚拟滚动组件
+  interface VirtualScrollProps<T> {
+    items: T[];
+    renderItem: (item: T, index: number) => ReactNode;
+    itemHeight: number;
+    containerHeight: number;
+    itemKey: (item: T) => string;
   }
-};
 
-// 获取强度颜色
-const getStrengthColor = (strength: number): string => {
-  if (strength >= 0.8) return '#ef4444'; // 红色
-  if (strength >= 0.6) return '#f59e0b'; // 橙色
-  if (strength >= 0.4) return '#eab308'; // 黄色
-  if (strength >= 0.2) return '#84cc16'; // 绿色
-  return '#22c55e'; // 深绿色
-};
+  const VirtualScroll = <T extends any>({
+    items,
+    renderItem,
+    itemHeight,
+    containerHeight,
+    itemKey
+  }: VirtualScrollProps<T>) => {
+    const containerRef = React.useRef<HTMLDivElement>(null);
+    const scrollTopRef = React.useRef(0);
+    const rafRef = React.useRef<number | null>(null);
+    const prevItemsCountRef = React.useRef(items.length);
 
-// FPS监控组件
-const FPSCounter = () => {
-  const fpsRef = useRef(0);
-  const lastTimeRef = useRef(performance.now());
-  const frameCountRef = useRef(0);
-  const warnThreshold = 55; // 低于此FPS时显示警告
-  
-  useEffect(() => {
-    const measureFPS = (time: number) => {
-      frameCountRef.current++;
-      const secondsPassed = (time - lastTimeRef.current) / 1000;
-      
-      if (secondsPassed >= 1) {
-        fpsRef.current = frameCountRef.current;
-        frameCountRef.current = 0;
-        lastTimeRef.current = time;
-        
-        // 如果FPS低于阈值，在控制台显示警告
-        if (fpsRef.current < warnThreshold) {
-          console.warn(`Market页面FPS较低: ${fpsRef.current}fps，可能影响用户体验`);
+    // 计算可见区域的项目
+    const visibleCount = Math.ceil(containerHeight / itemHeight);
+    const bufferSize = 2;
+
+    // 计算可见项
+    const startIndex = Math.max(0, Math.floor(scrollTopRef.current / itemHeight) - bufferSize);
+    const endIndex = Math.min(items.length, startIndex + visibleCount + bufferSize * 2);
+    const visibleItems = items.slice(startIndex, endIndex);
+
+    // 节流处理滚动事件
+    const handleScroll = () => {
+      if (containerRef.current) {
+        scrollTopRef.current = containerRef.current.scrollTop;
+
+        if (rafRef.current === null) {
+          rafRef.current = requestAnimationFrame(() => {
+            // 触发重渲染
+            rafRef.current = null;
+          });
         }
       }
-      
-      requestAnimationFrame(measureFPS);
     };
-    
-    const animationFrameId = requestAnimationFrame(measureFPS);
-    
-    return () => cancelAnimationFrame(animationFrameId);
-  }, []);
-  
-  return null;
-};
 
-// 虚拟滚动组件
-interface VirtualScrollProps<T> {
-  items: T[];
-  renderItem: (item: T, index: number) => ReactNode;
-  itemHeight: number;
-  containerHeight: number;
-  itemKey: (item: T) => string;
-}
+    // 处理项目数量变化时的滚动位置调整
+    React.useEffect(() => {
+      if (prevItemsCountRef.current > items.length && containerRef.current) {
+        // 如果项目数量减少，确保滚动位置不会超出新的总高度
+        const newTotalHeight = items.length * itemHeight;
+        if (containerRef.current.scrollTop > newTotalHeight - containerHeight) {
+          containerRef.current.scrollTop = Math.max(0, newTotalHeight - containerHeight);
+          scrollTopRef.current = containerRef.current.scrollTop;
+        }
+      }
+      prevItemsCountRef.current = items.length;
+    }, [items.length, itemHeight, containerHeight]);
 
-const VirtualScroll = <T extends any>({
-  items,
-  renderItem,
-  itemHeight,
-  containerHeight,
-  itemKey
-}: VirtualScrollProps<T>) => {
-  const containerRef = React.useRef<HTMLDivElement>(null);
-  const scrollTopRef = React.useRef(0);
-  const rafRef = React.useRef<number | null>(null);
-  const prevItemsCountRef = React.useRef(items.length);
-  
-  // 计算可见区域的项目
-  const visibleCount = Math.ceil(containerHeight / itemHeight);
-  const bufferSize = 2;
-  
-  // 计算可见项
-  const startIndex = Math.max(0, Math.floor(scrollTopRef.current / itemHeight) - bufferSize);
-  const endIndex = Math.min(items.length, startIndex + visibleCount + bufferSize * 2);
-  const visibleItems = items.slice(startIndex, endIndex);
-  
-  // 节流处理滚动事件
-  const handleScroll = () => {
-    if (containerRef.current) {
-      scrollTopRef.current = containerRef.current.scrollTop;
-      
-      if (rafRef.current === null) {
-        rafRef.current = requestAnimationFrame(() => {
-          // 触发重渲染
-          rafRef.current = null;
-        });
-      }
-    }
-  };
-  
-  // 处理项目数量变化时的滚动位置调整
-  React.useEffect(() => {
-    if (prevItemsCountRef.current > items.length && containerRef.current) {
-      // 如果项目数量减少，确保滚动位置不会超出新的总高度
-      const newTotalHeight = items.length * itemHeight;
-      if (containerRef.current.scrollTop > newTotalHeight - containerHeight) {
-        containerRef.current.scrollTop = Math.max(0, newTotalHeight - containerHeight);
-        scrollTopRef.current = containerRef.current.scrollTop;
-      }
-    }
-    prevItemsCountRef.current = items.length;
-  }, [items.length, itemHeight, containerHeight]);
-  
-  // 组件卸载时清理
-  React.useEffect(() => {
-    return () => {
-      if (rafRef.current !== null) {
-        cancelAnimationFrame(rafRef.current);
-      }
-    };
-  }, []);
-  
-  // 总高度
-  const totalHeight = items.length * itemHeight;
-  
-  // 偏移量
-  const offsetY = startIndex * itemHeight;
-  
-  return (
-    <div
-      ref={containerRef}
-      className="virtual-scroll-container"
-      style={{ height: containerHeight, overflow: 'auto' }}
-      onScroll={handleScroll}
-    >
-      <div className="virtual-scroll-content" style={{ height: totalHeight }}>
-        <div style={{ transform: `translateY(${offsetY}px)` }}>
-          {visibleItems.map((item, index) => renderItem(item, startIndex + index))}
+    // 组件卸载时清理
+    React.useEffect(() => {
+      return () => {
+        if (rafRef.current !== null) {
+          cancelAnimationFrame(rafRef.current);
+        }
+      };
+    }, []);
+
+    // 总高度
+    const totalHeight = items.length * itemHeight;
+
+    // 偏移量
+    const offsetY = startIndex * itemHeight;
+
+    return (
+      <div
+        ref={containerRef}
+        className="virtual-scroll-container"
+        style={{ height: containerHeight, overflow: 'auto' }}
+        onScroll={handleScroll}
+      >
+        <div className="virtual-scroll-content" style={{ height: totalHeight }}>
+          <div style={{ transform: `translateY(${offsetY}px)` }}>
+            {visibleItems.map((item, index) => renderItem(item, startIndex + index))}
+          </div>
         </div>
       </div>
-    </div>
-  );
-};
-
-// 股票行组件（使用React.memo优化）
-interface StockRowProps {
-  stock: StockWithStrength;
-  onClick: (stock: StockWithStrength) => void;
-  onLightningTrade: (stock: StockWithStrength) => void;
-  onWatchlistToggle: (stock: StockWithStrength, e: React.MouseEvent) => void;
-  formatNumber: (num: number, decimals?: number) => string;
-  formatVolume: (volume: number) => string;
-  isProcessing?: boolean; // 是否正在处理该股票
-}
-
-const StockRow: React.FC<StockRowProps> = React.memo(({
-  stock,
-  onClick,
-  onLightningTrade,
-  onWatchlistToggle,
-  formatNumber,
-  formatVolume,
-  isProcessing
-}) => {
-  // 直接使用 stock.consensusResult，避免重复计算
-  const { consensusResult } = stock;
-  const aiDecision = consensusResult?.finalDecision;
-  const aiConfidence = consensusResult?.confidence || 0;
-  const strengthColor = useMemo(() => getStrengthColor(stock.strength || 0), [stock.strength]);
-  
-  const handleLightningTrade = (e: React.MouseEvent) => {
-    e.stopPropagation(); // 防止触发整行点击
-    onLightningTrade(stock);
+    );
   };
-  
-  return (
-    <tr className="table-row" onClick={() => onClick(stock)}>
-      <td className="stock-name">
-        {isProcessing && <span className="processing-indicator"></span>}
-        {stock.name}
-      </td>
-      <td className="stock-code">{stock.ts_code}</td>
-      <td className="stock-price">{formatNumber(stock.price || 0)}</td>
-      <td className={`stock-change-percent ${(stock.changePercent || 0) >= 0 ? 'positive' : 'negative'}`}>
-        {formatNumber(stock.changePercent || 0, 2)}%
-      </td>
-      <td className={`stock-change ${(stock.change || 0) >= 0 ? 'positive' : 'negative'}`}>
-        {formatNumber(stock.change || 0, 2)}
-      </td>
-      <td className="stock-volume">{formatVolume(stock.volume || 0)}</td>
-      <td className="stock-ai-rating">
-        {aiDecision ? (
-          <div className={`ai-badge badge-${aiDecision}`}>
-            {getAIDecisionText(aiDecision)}
-            <span className="badge-confidence">{(aiConfidence * 100).toFixed(0)}%</span>
+
+  // 股票行组件（使用React.memo优化）
+  interface StockRowProps {
+    stock: StockWithStrength;
+    onClick: (stock: StockWithStrength) => void;
+    onLightningTrade: (stock: StockWithStrength) => void;
+    onWatchlistToggle: (stock: StockWithStrength, e: React.MouseEvent) => void;
+    formatNumber: (num: number, decimals?: number) => string;
+    formatVolume: (volume: number) => string;
+    isProcessing?: boolean; // 是否正在处理该股票
+  }
+
+  const StockRow: React.FC<StockRowProps> = React.memo(({
+    stock,
+    onClick,
+    onLightningTrade,
+    onWatchlistToggle,
+    formatNumber,
+    formatVolume,
+    isProcessing
+  }) => {
+    // 直接使用 stock.consensusResult，避免重复计算
+    const { consensusResult } = stock;
+    const aiDecision = consensusResult?.finalDecision;
+    const aiConfidence = consensusResult?.confidence || 0;
+    const strengthColor = useMemo(() => getStrengthColor(stock.strength || 0), [stock.strength]);
+
+    const handleLightningTrade = (e: React.MouseEvent) => {
+      e.stopPropagation(); // 防止触发整行点击
+      onLightningTrade(stock);
+    };
+
+    return (
+      <tr className="table-row" onClick={() => onClick(stock)}>
+        <td className="stock-name">
+          {isProcessing && <span className="processing-indicator"></span>}
+          {stock.name}
+        </td>
+        <td className="stock-code">{stock.ts_code}</td>
+        <td className="stock-price">{formatNumber(stock.price || 0)}</td>
+        <td className={`stock-change-percent ${(stock.changePercent || 0) >= 0 ? 'positive' : 'negative'}`}>
+          {formatNumber(stock.changePercent || 0, 2)}%
+        </td>
+        <td className={`stock-change ${(stock.change || 0) >= 0 ? 'positive' : 'negative'}`}>
+          {formatNumber(stock.change || 0, 2)}
+        </td>
+        <td className="stock-volume">{formatVolume(stock.volume || 0)}</td>
+        <td className="stock-ai-rating">
+          {aiDecision ? (
+            <div className={`ai-badge badge-${aiDecision}`}>
+              {getAIDecisionText(aiDecision)}
+              <span className="badge-confidence">{(aiConfidence * 100).toFixed(0)}%</span>
+            </div>
+          ) : (
+            <span className="no-rating">-</span>
+          )}
+        </td>
+        <td className="stock-strength">
+          <div className="strength-axis">
+            <div
+              className="strength-bar"
+              style={{
+                width: `${(stock.strength || 0) * 100}%`,
+                backgroundColor: strengthColor
+              }}
+            ></div>
           </div>
-        ) : (
-          <span className="no-rating">-</span>
-        )}
-      </td>
-      <td className="stock-strength">
-        <div className="strength-axis">
-          <div 
-            className="strength-bar" 
-            style={{
-              width: `${(stock.strength || 0) * 100}%`,
-              backgroundColor: strengthColor
-            }}
-          ></div>
-        </div>
-        <span className="strength-value">{Math.round((stock.strength || 0) * 100)}</span>
-      </td>
-      <td className="stock-action">
-        <button 
-          className={`watchlist-btn ${stock.isInWatchlist ? 'active' : ''}`} 
-          onClick={(e) => onWatchlistToggle(stock, e)}
-          title={stock.isInWatchlist ? "从自选股移除" : "加入自选股"}
-        >
-          {stock.isInWatchlist ? '★' : '☆'}
-        </button>
-        <button className="lightning-trade-btn" onClick={handleLightningTrade}>
-          ⚡
-        </button>
-      </td>
-    </tr>
-  );
-});
+          <span className="strength-value">{Math.round((stock.strength || 0) * 100)}</span>
+        </td>
+        <td className="stock-action">
+          <button
+            className={`watchlist-btn ${stock.isInWatchlist ? 'active' : ''}`}
+            onClick={(e) => onWatchlistToggle(stock, e)}
+            title={stock.isInWatchlist ? "从自选股移除" : "加入自选股"}
+          >
+            {stock.isInWatchlist ? '★' : '☆'}
+          </button>
+          <button className="lightning-trade-btn" onClick={handleLightningTrade}>
+            ⚡
+          </button>
+        </td>
+      </tr>
+    );
+  });
 
-// 添加keyExtractor以优化React.memo的比较
-StockRow.displayName = 'StockRow';
+  // 添加keyExtractor以优化React.memo的比较
+  StockRow.displayName = 'StockRow';
 
-return (
+  return (
     <div className="market-page">
       <FPSCounter /> {/* FPS监控组件 */}
       <div className="market-container">
@@ -552,19 +552,19 @@ return (
 
         {/* 右侧行情表格 */}
         <div className="market-table-container">
-        {/* 错误消息显示 */}
-        {error && (
-          <div className="error-message">
-            <span>⚠️</span>
-            <span>{error}</span>
-            <button className="clear-error-btn" onClick={() => setError(null)}>×</button>
+          {/* 错误消息显示 */}
+          {error && (
+            <div className="error-message">
+              <span>⚠️</span>
+              <span>{error}</span>
+              <button className="clear-error-btn" onClick={() => setError(null)}>×</button>
+            </div>
+          )}
+
+          <div className="table-header">
+            <h2>{categories.find(cat => cat.id === selectedCategory)?.name}行情</h2>
           </div>
-        )}
-        
-        <div className="table-header">
-          <h2>{categories.find(cat => cat.id === selectedCategory)?.name}行情</h2>
-        </div>
-          
+
           {loading ? (
             <div className="loading-indicator">
               <div className="spinner"></div>

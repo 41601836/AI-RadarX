@@ -9,7 +9,7 @@ const nextConfig = {
     };
     return config;
   },
-  
+
   // 构建优化
   compiler: {
     // 移除生产环境中的console.log
@@ -21,7 +21,7 @@ const nextConfig = {
       properties: ['data-testid', 'data-test'],
     },
   },
-  
+
   // 性能优化
   images: {
     // 启用图片优化
@@ -31,9 +31,9 @@ const nextConfig = {
     // 图片加载优化
     minimumCacheTTL: 60,
   },
-  
 
-  
+
+
   // 缓存优化
   headers: async () => [
     {
@@ -47,16 +47,16 @@ const nextConfig = {
       ],
     },
   ],
-  
+
   // 代码分割优化
   productionBrowserSourceMaps: false,
-  
+
   // 环境变量配置
   env: {
     // 可以在这里配置环境变量
     NEXT_PUBLIC_API_VERSION: 'v1',
   },
-  
+
   // 跨域请求配置
   async rewrites() {
     return [
@@ -67,16 +67,13 @@ const nextConfig = {
       },
     ];
   },
-  
-  // 构建输出优化
-  output: 'standalone',
-  
+
   // 服务器端渲染优化
   serverRuntimeConfig: {
     // 服务器端的配置
     appName: 'AI Trading Terminal',
   },
-  
+
   // 客户端配置
   publicRuntimeConfig: {
     // 客户端可以访问的配置

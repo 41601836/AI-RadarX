@@ -1,0 +1,12 @@
+{
+  "symbol": "AAPL",
+  "data_type": "stock_data",
+  "market_type": "us",
+  "start_date": "2024-06-27",
+  "end_date": "2025-06-27",
+  "data_source": "finnhub",
+  "file_path": "C:\\TradingAgentsCN\\tradingagents\\dataflows\\data_cache\\us_stocks\\AAPL_stock_data_57064dbfdcb1.txt",
+  "file_format": "txt",
+  "content_length": 304,
+  "cached_at": "2025-09-01T15:24:10.377017"
+}

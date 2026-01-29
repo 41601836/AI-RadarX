@@ -1,0 +1,12 @@
+{
+  "symbol": "tushare_stock_list",
+  "data_type": "stock_data",
+  "market_type": "us",
+  "start_date": null,
+  "end_date": null,
+  "data_source": "tushare",
+  "file_path": "C:\\TradingAgentsCN\\tradingagents\\dataflows\\data_cache\\us_stocks\\tushare_stock_list_stock_data_a6d9215f1767.csv",
+  "file_format": "csv",
+  "content_length": 792,
+  "cached_at": "2025-09-20T08:16:39.490421"
+}

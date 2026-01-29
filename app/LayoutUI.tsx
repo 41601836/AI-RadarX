@@ -1,6 +1,6 @@
 'use client';
 // 客户端布局UI组件
-import { ReactNode, useState } from 'react'
+import { ReactNode, useState, useEffect } from 'react'
 import SearchComponent from '../components/SearchComponent'
 import Ticker from '../components/Ticker'
 import RiskNotification from '../components/RiskNotification'
@@ -15,6 +15,13 @@ interface MenuItem {
 }
 
 const LayoutUI = ({ children }: { children: ReactNode }) => {
+  // 解决Hydration问题的客户端挂载保护
+  const [isMounted, setIsMounted] = useState(false);
+  
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+  
   // 左侧菜单数据
   const menuItems: MenuItem[] = [
     { id: 'chip', name: '筹码', icon: '📊', isImplemented: true },
@@ -29,6 +36,11 @@ const LayoutUI = ({ children }: { children: ReactNode }) => {
   const { dashboardLayout, setSidebarCollapsed } = useUserStore();
   // 选中的菜单项
   const [selectedMenuItem, setSelectedMenuItem] = useState('chip');
+  
+  // 在客户端未完成Hydration时返回null，避免Hydration不匹配
+  if (!isMounted) {
+    return <div className="flex flex-col h-screen"><main className="flex-1 overflow-hidden">{children}</main></div>;
+  }
 
   // 切换侧边栏折叠状态
   const toggleSidebar = () => {
@@ -64,10 +76,35 @@ const LayoutUI = ({ children }: { children: ReactNode }) => {
             <Ticker />
           </div>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="text-sm text-gray-600">老板</div>
-          <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
-            <span className="text-gray-600">B</span>
+        <div className="flex items-center gap-6">
+          {/* 状态栏 */}
+          <div className="flex items-center gap-4">
+            {/* API状态 */}
+            <div className="flex items-center gap-1">
+              <span className="text-xs">API:</span>
+              <span className="text-xs text-green-500">ONLINE</span>
+              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+            </div>
+            
+            {/* 引擎版本 */}
+            <div className="flex items-center gap-1">
+              <span className="text-xs">ENGINE:</span>
+              <span className="text-xs">AI-V3.2</span>
+            </div>
+            
+            {/* 延迟信息 */}
+            <div className="flex items-center gap-1">
+              <span className="text-xs">LATENCY:</span>
+              <span className="text-xs">42ms</span>
+            </div>
+          </div>
+          
+          {/* 用户信息 */}
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-gray-600">老板</div>
+            <div className="w-8 h-8 bg-gray-200 flex items-center justify-center">
+              <span className="text-gray-600">B</span>
+            </div>
           </div>
         </div>
       </header>

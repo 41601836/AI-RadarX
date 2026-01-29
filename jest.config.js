@@ -1,15 +1,13 @@
 module.exports = {
-  preset: 'ts-jest',
   testEnvironment: 'node',
-  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
-  roots: ['<rootDir>'],
-  testMatch: ['**/__tests__/**/*.[jt]s?(x)', '**/?(*.)+(spec|test).[tj]s?(x)'],
-  transform: {
-    '^.+\.tsx?$': 'ts-jest'
-  },
-  modulePaths: ['<rootDir>'],
-  moduleNameMapping: {
+  testPathIgnorePatterns: ['/node_modules/', '/.next/'],
+  collectCoverage: true,
+  collectCoverageFrom: ['app/**/*.{js,jsx,ts,tsx}', 'lib/**/*.{js,jsx,ts,tsx}'],
+  coverageDirectory: 'coverage',
+  moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1'
   },
-  verbose: true
+  transform: {
+    '^.+\.(js|jsx|ts|tsx)$': ['babel-jest', { presets: ['next/babel'] }]
+  }
 };

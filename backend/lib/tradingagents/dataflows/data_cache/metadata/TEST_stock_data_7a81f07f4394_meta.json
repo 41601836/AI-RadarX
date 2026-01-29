@@ -1,0 +1,12 @@
+{
+  "symbol": "TEST",
+  "data_type": "stock_data",
+  "market_type": "us",
+  "start_date": "2024-01-01",
+  "end_date": "2024-12-31",
+  "data_source": "integration_test",
+  "file_path": "C:\\TradingAgentsCN\\tradingagents\\dataflows\\data_cache\\us_stocks\\TEST_stock_data_7a81f07f4394.txt",
+  "file_format": "txt",
+  "content_length": 33,
+  "cached_at": "2025-09-18T10:15:33.491475"
+}

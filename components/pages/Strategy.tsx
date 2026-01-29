@@ -11,35 +11,35 @@ import { StockBasicInfo } from '../../lib/api/market';
 const Strategy: React.FC = () => {
   // 添加客户端仅渲染模式
   const [mounted, setMounted] = useState(false);
-  
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-  
-  // 在组件挂载前不渲染任何内容
-  if (!mounted) return null;
-  
-  const { 
-    runConsensus, 
-    getStockConsensus, 
-    isProcessing, 
+
+  const {
+    runConsensus,
+    getStockConsensus,
+    isProcessing,
     agentVotes,
     consensusResults,
-    clearStockData 
+    clearStockData
   } = useStrategyStore();
-  
+
   // 添加用户状态管理和股票上下文
   const { setActiveTab } = useUserStore();
   const { setCurrentTicker } = useStockContext();
-  
+
   const [stockCode, setStockCode] = useState('000001'); // 默认股票代码
   const [stockName, setStockName] = useState('平安银行'); // 默认股票名称
-  
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // 在组件挂载前不渲染任何内容
+  if (!mounted) return null;
+
   // 获取当前股票的共识结果
   const currentConsensus = getStockConsensus(stockCode);
   const isCalculating = isProcessing[stockCode] || false;
   const currentVotes = agentVotes[stockCode] || [];
-  
+
   // 定义决策日志数据
   const decisionLogs: any[] = [];
 
@@ -60,7 +60,7 @@ const Strategy: React.FC = () => {
               </div>
             </div>
           </div>
-          
+
           <div className="config-section">
             <label>持仓周期</label>
             <div className="period-options">
@@ -69,7 +69,7 @@ const Strategy: React.FC = () => {
               <button className="period-btn">长线</button>
             </div>
           </div>
-          
+
           <div className="config-section">
             <label>关注板块</label>
             <div className="sector-tags">
@@ -79,15 +79,15 @@ const Strategy: React.FC = () => {
               <span className="sector-tag">金融</span>
             </div>
           </div>
-          
-          <button 
+
+          <button
             className={`analyze-btn ${isCalculating ? 'calculating' : ''}`}
             onClick={() => runConsensus(stockCode, stockName)}
             disabled={isCalculating}
           >
             {isCalculating ? '分析中...' : '开始AI会诊'}
           </button>
-          
+
           {isCalculating && (
             <div className="pulse-overlay">
               <div className="pulse-animation">
@@ -100,7 +100,7 @@ const Strategy: React.FC = () => {
           )}
         </div>
       </div>
-      
+
       {/* 中间：核心决策看板 */}
       <div className="middle-panel">
         {/* 总指挥结论 */}
@@ -108,7 +108,7 @@ const Strategy: React.FC = () => {
           <h3>AI 多智能体会诊结论</h3>
           <div className="conclusion-content">
             <div className="overall-decision">
-              <span 
+              <span
                 className={`decision-label ${currentConsensus?.finalDecision === 'buy' ? 'bullish' : currentConsensus?.finalDecision === 'sell' ? 'bearish' : 'neutral'}`}
                 onClick={() => {
                   if (currentConsensus && currentConsensus.finalDecision === 'buy') {
@@ -129,8 +129,8 @@ const Strategy: React.FC = () => {
                 }}
               >
                 {currentConsensus ? (
-                  currentConsensus.finalDecision === 'buy' ? '积极看多' : 
-                  currentConsensus.finalDecision === 'sell' ? '积极看空' : '观望等待'
+                  currentConsensus.finalDecision === 'buy' ? '积极看多' :
+                    currentConsensus.finalDecision === 'sell' ? '积极看空' : '观望等待'
                 ) : '等待分析'}
               </span>
               <span className="confidence-score">
@@ -140,20 +140,20 @@ const Strategy: React.FC = () => {
             <p className="decision-desc">
               {currentConsensus ? currentConsensus.reasoning : '点击"开始AI会诊"按钮启动多智能体分析...'}
             </p>
-            
+
             <div className="agent-decisions">
               {currentVotes.map((vote) => (
-                <DecisionBadge 
+                <DecisionBadge
                   key={vote.agentId}
-                  agent={vote.agentName} 
-                  decision={vote.direction === 'buy' ? 'bullish' : vote.direction === 'sell' ? 'bearish' : 'neutral'} 
-                  confidence={Math.round(vote.confidence * 100)} 
+                  agent={vote.agentName}
+                  decision={vote.direction === 'buy' ? 'bullish' : vote.direction === 'sell' ? 'bearish' : 'neutral'}
+                  confidence={Math.round(vote.confidence * 100)}
                 />
               ))}
             </div>
           </div>
         </div>
-        
+
         {/* 自省可视化 */}
         {currentConsensus && (
           <div className="introspection-card">
@@ -186,8 +186,8 @@ const Strategy: React.FC = () => {
                 <div className="chart-title">智能体投票分布</div>
                 <div className="vote-distribution">
                   {currentVotes.map((vote) => (
-                    <div 
-                      key={vote.agentId} 
+                    <div
+                      key={vote.agentId}
                       className={`vote-bar ${vote.direction === 'buy' ? 'bullish' : vote.direction === 'sell' ? 'bearish' : 'neutral'}`}
                       style={{ width: `${vote.confidence * 100}%` }}
                       title={`${vote.agentName}: ${vote.direction === 'buy' ? '看多' : vote.direction === 'sell' ? '看空' : '观望'} (${(vote.confidence * 100).toFixed(1)}%)`}
@@ -200,13 +200,13 @@ const Strategy: React.FC = () => {
             </div>
           </div>
         )}
-        
+
         {/* 思考链控制台 */}
         <div className="console-container">
           <StrategyConsole stockCode={stockCode} />
         </div>
       </div>
-      
+
       {/* 右侧：历史决策回测 */}
       <div className="right-panel">
         <div className="panel-card">
@@ -229,7 +229,7 @@ const Strategy: React.FC = () => {
               <span className="metric-value positive">2.3:1</span>
             </div>
           </div>
-          
+
           <div className="chart-placeholder">
             <div className="chart-title">收益曲线</div>
             <div className="chart-skeleton">
@@ -237,7 +237,7 @@ const Strategy: React.FC = () => {
               <div className="skeleton-line"></div>
             </div>
           </div>
-          
+
           <div className="recent-trades">
             <h4>近期决策</h4>
             <div className="trade-item">

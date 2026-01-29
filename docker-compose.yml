@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # 前端应用服务
+  # Frontend Service (Next.js)
   frontend:
     build:
       context: .
@@ -17,6 +17,7 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD:-default-password}
     depends_on:
       - redis
+      - backend
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -24,12 +25,36 @@ services:
         max-size: "10m"
         max-file: "3"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      test: [ "CMD", "curl", "-f", "http://localhost:3000" ]
       interval: 30s
       timeout: 10s
       retries: 3
 
-  # Redis缓存服务
+  # Backend Service (Python/FastAPI)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/stock_db
+      - REDIS_URL=redis://redis:6379
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/lib:/app/lib
+    depends_on:
+      - mongo
+      - redis
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Redis Service
   redis:
     image: redis:7.2-alpine
     ports:
@@ -38,25 +63,32 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD:-default-password}
     volumes:
       - redis_data:/data
-      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+    # Removed custom redis.conf binding to avoid errors if file missing
+    # command: redis-server /usr/local/etc/redis/redis.conf
     restart: unless-stopped
-    command: redis-server /usr/local/etc/redis/redis.conf
     logging:
       driver: "json-file"
       options:
         max-size: "5m"
         max-file: "2"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 3
 
-# 数据卷配置（持久化存储）
+  # MongoDB Service
+  mongo:
+    image: mongo:6.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+
+# Volumes Configuration
 volumes:
   redis_data:
     driver: local
-    driver_opts:
-      type: 'none'
-      o: 'bind'
-      device: './.data/redis'
+  mongo_data:
+    driver: local

@@ -1,11 +1,14 @@
 node_modules/
 dist/
 .next/
+coverage/
+.npm-cache/
 .env
 .env.local
 .env.production
 .env.development
 *.log
+*-logs.txt
 *.pid
 *.seed
 *.pid.lock

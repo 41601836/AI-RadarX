@@ -22,7 +22,11 @@ export default function SearchComponent() {
   const [isIndustryLoading, setIsIndustryLoading] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const [searchCategory, setSearchCategory] = useState('ALL');
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Search categories
+  const searchCategories = ['ALL', 'STOCKS', 'FUNDS', 'AI_INSIGHTS'];
 
   // 生成10字以内的盘中一句话决策总结
   const generateDecisionSummary = (stock: StockBasicInfo): string => {
@@ -35,32 +39,32 @@ export default function SearchComponent() {
       isCrossStar: Math.random() > 0.7, // 是否为十字星
       isHighPosition: Math.random() > 0.7 // 是否处于高位
     };
-    
+
     // 严格的决策逻辑
     if (mockStockData.profitRatio > 90 && mockStockData.explodeRate > 30) {
       return "高位踩踏风险，撤退";
     }
-    
+
     if (mockStockData.volumeRatio < 0.5 && mockStockData.costSupport && mockStockData.isCrossStar) {
       return "地量十字星，关注低吸";
     }
-    
+
     if (mockStockData.volumeRatio > 2 && !mockStockData.isHighPosition) {
       return "放量突破，关注追入";
     }
-    
+
     if (mockStockData.profitRatio < 10 && mockStockData.costSupport) {
       return "超跌反弹，关注抄底";
     }
-    
+
     if (mockStockData.volumeRatio < 0.8 && mockStockData.isHighPosition) {
       return "缩量横盘，谨慎观望";
     }
-    
+
     if (mockStockData.explodeRate > 50 && mockStockData.isHighPosition) {
       return "炸板严重，建议离场";
     }
-    
+
     // 默认决策
     const defaultSummaries = [
       '逢低买入',
@@ -74,7 +78,7 @@ export default function SearchComponent() {
       '强势上涨',
       '震荡整理'
     ];
-    
+
     // 根据股票代码生成一个确定性的随机索引
     const hashCode = (str: string): number => {
       let hash = 0;
@@ -85,7 +89,7 @@ export default function SearchComponent() {
       }
       return hash;
     };
-    
+
     const index = defaultSummaries.length > 0 ? Math.abs(hashCode(stock.ts_code)) % defaultSummaries.length : 0;
     return defaultSummaries.length > 0 ? defaultSummaries[index] : '暂无相关信息';
   };
@@ -149,7 +153,7 @@ export default function SearchComponent() {
       const matchesName = stock.name.toLowerCase().includes(term);
       // 匹配股票名称拼音（如果有）
       const matchesPinyin = stock.pinyin ? stock.pinyin.toLowerCase().includes(term) : false;
-      
+
       return matchesCode || matchesName || matchesPinyin;
     });
 
@@ -176,13 +180,13 @@ export default function SearchComponent() {
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
-        setHighlightedIndex(prev => 
+        setHighlightedIndex(prev =>
           prev < filteredStocks.length - 1 ? prev + 1 : 0
         );
         break;
       case 'ArrowUp':
         e.preventDefault();
-        setHighlightedIndex(prev => 
+        setHighlightedIndex(prev =>
           prev > 0 ? prev - 1 : filteredStocks.length - 1
         );
         break;
@@ -250,66 +254,82 @@ export default function SearchComponent() {
 
   return (
     <div id="search-container" className="search-container">
-          <div className="search-input-wrapper">
-            <input
-              ref={searchInputRef}
-              type="text"
-              className="search-input"
-              placeholder="搜索股票代码或名称..."
-              value={searchTerm}
-              onChange={handleInputChange}
-              onFocus={() => setShowDropdown(true)}
-              onKeyPress={(e) => {
-                if (e.key === 'Enter') {
-                  const input = searchTerm.trim().toLowerCase();
-                  
-                  // 检查是否为6位数字
-                  if (/^\d{6}$/.test(input)) {
-                    // 查找对应的股票（同时匹配symbol和ts_code）
-                    const stock = stockList.find(s => 
-                      s.symbol === input || 
-                      s.ts_code.endsWith(input)
-                    );
-                    if (stock) {
-                      handleStockSelect(stock);
-                    } else {
-                      // 如果找不到，尝试使用输入的6位数字作为代码
-                      // 自动判断交易所（000开头为深交所，600开头为上交所）
-                      const exchange = input.startsWith('6') ? 'SH' : 'SZ';
-                      const ts_code = `${exchange}${input}`;
-                      setCurrentTicker({ 
-                        ts_code, 
-                        symbol: input, 
-                        name: '', 
-                        industry: '', 
-                        area: '', 
-                        market: '', 
-                        list_date: '', 
-                        pinyin: '' 
-                      });
-                      setSearchTerm(input);
-                      setShowDropdown(false);
-                    }
-                  } 
-                  // 检查是否为Tab切换命令
-                  else if (['dashboard', 'market', 'trade', 'strategy', 'assets', 'settings'].includes(input)) {
-                    setActiveTab(input as ActiveTab);
-                    setSearchTerm('');
-                    setShowDropdown(false);
-                  } 
-                  // 默认行为
-                  else if (filteredStocks.length > 0) {
-                    handleStockSelect(filteredStocks[0]);
-                  }
+      <div className="search-input-wrapper">
+        <input
+          ref={searchInputRef}
+          type="text"
+          className="search-input"
+          placeholder="搜索股票代码或名称..."
+          value={searchTerm}
+          onChange={handleInputChange}
+          onFocus={() => setShowDropdown(true)}
+          onKeyPress={(e) => {
+            if (e.key === 'Enter') {
+              const input = searchTerm.trim().toLowerCase();
+
+              // 检查是否为6位数字
+              if (/^\d{6}$/.test(input)) {
+                // 查找对应的股票（同时匹配symbol和ts_code）
+                const stock = stockList.find(s =>
+                  s.symbol === input ||
+                  s.ts_code.endsWith(input)
+                );
+                if (stock) {
+                  handleStockSelect(stock);
+                } else {
+                  // 如果找不到，尝试使用输入的6位数字作为代码
+                  // 自动判断交易所（000开头为深交所，600开头为上交所）
+                  const exchange = input.startsWith('6') ? 'SH' : 'SZ';
+                  const ts_code = `${exchange}${input}`;
+                  setCurrentTicker({
+                    ts_code,
+                    symbol: input,
+                    name: '',
+                    industry: '',
+                    area: '',
+                    market: '',
+                    list_date: '',
+                    pinyin: ''
+                  });
+                  setSearchTerm(input);
+                  setShowDropdown(false);
                 }
-              }}
-              onKeyDown={handleKeyDown}
-              disabled={isLoading}
-            />
+              }
+              // 检查是否为Tab切换命令
+              else if (['dashboard', 'market', 'trade', 'strategy', 'assets', 'settings'].includes(input)) {
+                setActiveTab(input as ActiveTab);
+                setSearchTerm('');
+                setShowDropdown(false);
+              }
+              // 默认行为
+              else if (filteredStocks.length > 0) {
+                handleStockSelect(filteredStocks[0]);
+              }
+            }
+          }}
+          onKeyDown={handleKeyDown}
+          disabled={isLoading}
+        />
         {isLoading && <div className="search-loading">加载中...</div>}
       </div>
-      
-      {showDropdown && filteredStocks.length > 0 && (
+
+      {showDropdown && (
+        <div className="search-dropdown">
+          {/* 搜索分类标签 */}
+          <div className="search-categories">
+            {searchCategories.map((category) => (
+              <button
+                key={category}
+                className={`category-button ${searchCategory === category ? 'active' : ''}`}
+                onClick={() => setSearchCategory(category)}
+              >
+                {category}
+              </button>
+            ))}
+          </div>
+
+          {/* 搜索结果 */}
+          {filteredStocks.length > 0 ? (
             <div className="search-results">
               {filteredStocks.map((stock, index) => {
                 const industryScore = getIndustryScore(stock.industry);
@@ -319,38 +339,38 @@ export default function SearchComponent() {
                     className={`search-result-item ${index === highlightedIndex ? 'highlighted' : ''}`}
                     onClick={() => handleStockSelect(stock)}
                   >
-                  <div className="stock-info">
-                    <div className="stock-name">{stock.name}</div>
-                    <div className="stock-code">{stock.ts_code}</div>
+                    <div className="stock-info">
+                      <div className="stock-name">{stock.name}</div>
+                      <div className="stock-code">{stock.ts_code}</div>
+                    </div>
+                    <div className="stock-details">
+                      <div className="stock-industry">{stock.industry}</div>
+                      {industryScore && (
+                        <div className="industry-score">
+                          <span className="score-value">{industryScore.score}</span>
+                          <span className={`trend-indicator ${getTrendColor(industryScore.trend)}`}>
+                            {getTrendIcon(industryScore.trend)}
+                          </span>
+                          <span className="rank-info">#{industryScore.rank}</span>
+                        </div>
+                      )}
+                      <div className="stock-market">{stock.market}</div>
+                    </div>
+                    {/* ActionColumn: 10字以内的盘中一句话决策总结 */}
+                    <div className="stock-decision">
+                      <span className="decision-summary">
+                        {stock.decisionSummary || '暂无建议'}
+                      </span>
+                    </div>
                   </div>
-                  <div className="stock-details">
-                    <div className="stock-industry">{stock.industry}</div>
-                    {industryScore && (
-                      <div className="industry-score">
-                        <span className="score-value">{industryScore.score}</span>
-                        <span className={`trend-indicator ${getTrendColor(industryScore.trend)}`}>
-                          {getTrendIcon(industryScore.trend)}
-                        </span>
-                        <span className="rank-info">#{industryScore.rank}</span>
-                      </div>
-                    )}
-                    <div className="stock-market">{stock.market}</div>
-                  </div>
-                  {/* ActionColumn: 10字以内的盘中一句话决策总结 */}
-                  <div className="stock-decision">
-                    <span className="decision-summary">
-                      {stock.decisionSummary || '暂无建议'}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      
-      {showDropdown && filteredStocks.length === 0 && searchTerm && (
-        <div className="search-no-results">
-          未找到匹配的股票
+                );
+              })}
+            </div>
+          ) : searchTerm ? (
+            <div className="search-no-results">
+              未找到匹配的股票
+            </div>
+          ) : null}
         </div>
       )}
 
@@ -358,6 +378,8 @@ export default function SearchComponent() {
         .search-container {
           position: relative;
           width: 100%;
+          background-color: #0A0A0A;
+          border: 1px solid rgba(255,255,255,0.1);
         }
 
         .search-input-wrapper {
@@ -368,20 +390,22 @@ export default function SearchComponent() {
           width: 100%;
           padding: 10px 15px;
           font-size: 14px;
-          border: 1px solid #333;
-          background-color: #000;
-          color: #cdd6f4;
+          border: 1px solid rgba(255,255,255,0.1);
+          background-color: #0A0A0A;
+          color: #FFFFFF;
           outline: none;
           transition: all 0.2s;
+          font-family: 'JetBrains Mono', monospace !important;
+          font-variant-numeric: tabular-nums !important;
         }
 
         .search-input:focus {
-          border-color: #89dceb;
-          box-shadow: 0 0 0 2px rgba(137, 220, 235, 0.2);
+          border-color: #00FF00;
+          box-shadow: 0 0 0 2px rgba(0, 255, 0, 0.2);
         }
 
         .search-input::placeholder {
-          color: #94a3b8;
+          color: rgba(255,255,255,0.5);
         }
 
         .search-loading {
@@ -389,20 +413,54 @@ export default function SearchComponent() {
           right: 10px;
           top: 50%;
           transform: translateY(-50%);
-          color: #89dceb;
+          color: #00FF00;
           font-size: 12px;
+          font-family: 'JetBrains Mono', monospace !important;
         }
 
-        .search-results {
+        .search-dropdown {
           position: absolute;
           top: 100%;
           left: 0;
           right: 0;
           margin-top: 4px;
-          background-color: #000;
-          border: 1px solid #333;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+          background-color: #0A0A0A;
+          border: 1px solid rgba(255,255,255,0.1);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
           z-index: 200;
+          width: 100%;
+        }
+
+        .search-categories {
+          display: flex;
+          gap: 2px;
+          padding: 8px;
+          border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .category-button {
+          background-color: #000;
+          color: #FFFFFF;
+          border: 1px solid rgba(255,255,255,0.1);
+          padding: 4px 8px;
+          font-size: 12px;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .category-button:hover {
+          background-color: rgba(255,255,255,0.05);
+        }
+
+        .category-button.active {
+          background-color: rgba(0,255,0,0.1);
+          border-color: #00FF00;
+          color: #00FF00;
+        }
+
+        .search-results {
+          background-color: #0A0A0A;
+          border: none;
           max-height: 300px;
           overflow-y: auto;
         }
@@ -414,15 +472,17 @@ export default function SearchComponent() {
           display: flex;
           justify-content: space-between;
           align-items: center;
+          background-color: #0A0A0A;
+          border-bottom: 1px solid rgba(255,255,255,0.05);
         }
 
         .search-result-item:hover {
-          background-color: #313244;
+          background-color: rgba(255,255,255,0.05);
         }
 
         .search-result-item.highlighted {
-          background-color: #00FF00;
-          color: #000000 !important;
+          background-color: rgba(0,255,0,0.1);
+          color: #00FF00 !important;
         }
 
         .search-result-item.highlighted .stock-name,
@@ -430,11 +490,11 @@ export default function SearchComponent() {
         .search-result-item.highlighted .stock-industry,
         .search-result-item.highlighted .stock-market,
         .search-result-item.highlighted .decision-summary {
-          color: #000000 !important;
+          color: #00FF00 !important;
         }
 
         .search-result-item.highlighted .score-value {
-          background-color: #000000;
+          background-color: rgba(0,255,0,0.2);
           color: #00FF00 !important;
         }
 
@@ -444,15 +504,17 @@ export default function SearchComponent() {
         }
 
         .stock-name {
-          color: #cdd6f4;
+          color: #FFFFFF;
           font-weight: 500;
           font-size: 14px;
+          font-family: 'JetBrains Mono', monospace !important;
         }
 
         .stock-code {
-          color: #94a3b8;
+          color: rgba(255,255,255,0.5);
           font-size: 12px;
           margin-top: 2px;
+          font-family: 'JetBrains Mono', monospace !important;
         }
 
         .stock-details {
@@ -462,14 +524,16 @@ export default function SearchComponent() {
         }
 
         .stock-industry {
-          color: #89dceb;
+          color: #00CCFF;
           font-size: 12px;
+          font-family: 'JetBrains Mono', monospace !important;
         }
 
         .stock-market {
-          color: #c4a7e7;
+          color: rgba(255,255,255,0.7);
           font-size: 13px;
           margin-top: 2px;
+          font-family: 'JetBrains Mono', monospace !important;
         }
 
         .industry-score {
@@ -480,12 +544,13 @@ export default function SearchComponent() {
         }
 
         .score-value {
-          background-color: #89dceb;
-          color: #1e293b;
+          background-color: rgba(255,255,255,0.1);
+          color: #00FF00;
           padding: 2px 6px;
-          border-radius: 4px;
           font-size: 13px;
           font-weight: 500;
+          font-family: 'JetBrains Mono', monospace !important;
+          font-variant-numeric: tabular-nums !important;
         }
 
         .trend-indicator {
@@ -494,22 +559,18 @@ export default function SearchComponent() {
         }
 
         .rank-info {
-          color: #94a3b8;
+          color: rgba(255,255,255,0.5);
           font-size: 13px;
+          font-family: 'JetBrains Mono', monospace !important;
         }
 
         .search-no-results {
-          position: absolute;
-          top: 100%;
-          left: 0;
-          right: 0;
-          margin-top: 4px;
-          background-color: #000;
-          border: 1px solid #333;
           padding: 12px 15px;
-          color: #94a3b8;
+          color: rgba(255,255,255,0.5);
           font-size: 14px;
           text-align: center;
+          background-color: #0A0A0A;
+          font-family: 'JetBrains Mono', monospace !important;
         }
 
         /* 滚动条样式 */

@@ -1,0 +1,12 @@
+{
+  "symbol": "000002",
+  "data_type": "stock_data",
+  "market_type": "china",
+  "start_date": null,
+  "end_date": null,
+  "data_source": "tushare",
+  "file_path": "C:\\TradingAgentsCN\\tradingagents\\dataflows\\data_cache\\china_stocks\\000002_stock_data_a4c342a2af6f.csv",
+  "file_format": "csv",
+  "content_length": 4720,
+  "cached_at": "2025-08-20T23:15:02.959732"
+}
