@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 
 export default function Home() {
   const [backendStatus, setBackendStatus] = useState<string>('initializing');
@@ -131,12 +132,12 @@ export default function Home() {
 
         {/* 底部操作区 */}
         <div className="mt-12 text-center">
-          <button
-            onClick={() => alert('Feature coming soon in Phase 2!')}
-            className="px-8 py-4 bg-white text-black font-bold rounded-lg hover:bg-gray-200 transition-colors shadow-[0_0_20px_rgba(255,255,255,0.3)]"
+          <Link
+            href="/market"
+            className="inline-block px-8 py-4 bg-white text-black font-bold rounded-lg hover:bg-gray-200 transition-colors shadow-[0_0_20px_rgba(255,255,255,0.3)]"
           >
             ENTER TERMINAL
-          </button>
+          </Link>
           <div className="mt-6 text-gray-500 text-sm font-mono">
             All systems go. Safe Mode active.
           </div>

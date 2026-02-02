@@ -15,7 +15,7 @@ qdrant-client>=1.7.0
 setuptools
 backtrader
 akshare>=1.17.86
-tushare
+tushare==1.4.24
 baostock
 finnhub-python
 parsel

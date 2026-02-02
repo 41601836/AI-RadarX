@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateRequestId } from '@/lib/api/common/response';
-import { config } from '@/lib/config';
+import { config as appConfig } from '@/lib/config';
 
 // 定义中间件配置
 const middlewareConfig = {
@@ -11,7 +11,7 @@ const middlewareConfig = {
     '/api/market/quote',
     '/api/market/stock_basic',
   ],
-  
+
   // CORS配置
   cors: {
     allowedOrigins: ['*'],
@@ -21,11 +21,11 @@ const middlewareConfig = {
     credentials: true,
     maxAge: 86400, // 24小时
   },
-  
+
   // 限流配置
   rateLimit: {
-    maxRequests: config.RATE_LIMIT_MAX,
-    windowMs: config.RATE_LIMIT_WINDOW,
+    maxRequests: appConfig.RATE_LIMIT_MAX,
+    windowMs: appConfig.RATE_LIMIT_WINDOW,
   },
 };
 
@@ -38,39 +38,39 @@ function logRequest(request: NextRequest) {
 // CORS处理
 function handleCors(request: NextRequest) {
   const origin = request.headers.get('origin');
-  
+
   // 处理预检请求
   if (request.method === 'OPTIONS') {
     const response = new NextResponse(null, {
       status: 204,
     });
-    
+
     // 设置CORS头
-    if (origin && middlewareConfig.cors.allowedOrigins.includes('*') || 
-        (Array.isArray(middlewareConfig.cors.allowedOrigins) && middlewareConfig.cors.allowedOrigins.includes(origin))) {
+    if (origin && (middlewareConfig.cors.allowedOrigins.includes('*') ||
+      (Array.isArray(middlewareConfig.cors.allowedOrigins) && middlewareConfig.cors.allowedOrigins.includes(origin)))) {
       response.headers.set('Access-Control-Allow-Origin', origin);
     }
-    
+
     response.headers.set('Access-Control-Allow-Methods', middlewareConfig.cors.allowedMethods.join(','));
     response.headers.set('Access-Control-Allow-Headers', middlewareConfig.cors.allowedHeaders.join(','));
     response.headers.set('Access-Control-Expose-Headers', middlewareConfig.cors.exposedHeaders.join(','));
     response.headers.set('Access-Control-Allow-Credentials', middlewareConfig.cors.credentials ? 'true' : 'false');
     response.headers.set('Access-Control-Max-Age', middlewareConfig.cors.maxAge.toString());
-    
+
     return response;
   }
-  
+
   // 处理普通请求
   const response = NextResponse.next();
-  
+
   // 设置CORS头
-  if (origin && middlewareConfig.cors.allowedOrigins.includes('*') || 
-      (Array.isArray(middlewareConfig.cors.allowedOrigins) && middlewareConfig.cors.allowedOrigins.includes(origin))) {
+  if (origin && (middlewareConfig.cors.allowedOrigins.includes('*') ||
+    (Array.isArray(middlewareConfig.cors.allowedOrigins) && middlewareConfig.cors.allowedOrigins.includes(origin)))) {
     response.headers.set('Access-Control-Allow-Origin', origin);
   }
-  
+
   response.headers.set('Access-Control-Allow-Credentials', middlewareConfig.cors.credentials ? 'true' : 'false');
-  
+
   return response;
 }
 
@@ -81,7 +81,7 @@ function checkAuth(request: NextRequest) {
   if (middlewareConfig.publicRoutes.some(route => pathname.startsWith(route))) {
     return null; // 无需验证
   }
-  
+
   // 检查授权头
   const authHeader = request.headers.get('Authorization');
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -97,11 +97,11 @@ function checkAuth(request: NextRequest) {
       },
     });
   }
-  
+
   // 验证JWT令牌（这里只是简单示例，实际应该使用JWT库验证）
   const token = authHeader.substring(7);
   // TODO: 实现实际的JWT验证逻辑
-  
+
   return null;
 }
 
@@ -114,16 +114,16 @@ const rateLimitStore = new Map<string, {
 function handleRateLimit(request: NextRequest) {
   const ip = request.headers.get('x-forwarded-for') || request.ip || 'unknown';
   const now = Date.now();
-  
+
   // 检查是否在限流窗口内
   const key = `rate-limit:${ip}`;
   const entry = rateLimitStore.get(key);
-  
+
   if (entry) {
     if (now < entry.resetTime) {
       // 增加计数
       entry.count++;
-      
+
       // 检查是否超过限制
       if (entry.count > middlewareConfig.rateLimit.maxRequests) {
         return new NextResponse(JSON.stringify({
@@ -153,7 +153,7 @@ function handleRateLimit(request: NextRequest) {
       resetTime: now + middlewareConfig.rateLimit.windowMs,
     });
   }
-  
+
   return null;
 }
 
@@ -161,7 +161,7 @@ function handleRateLimit(request: NextRequest) {
 export function middleware(request: NextRequest) {
   // 生成请求ID
   const requestId = generateRequestId();
-  
+
   // 设置请求ID头
   const requestWithId = new NextRequest(request.url, {
     headers: request.headers,
@@ -169,38 +169,38 @@ export function middleware(request: NextRequest) {
     body: request.body,
   });
   requestWithId.headers.set('X-Request-Id', requestId);
-  
+
   // 记录请求日志
   logRequest(requestWithId);
-  
+
   // 处理CORS
   const corsResponse = handleCors(requestWithId);
   if (request.method === 'OPTIONS') {
     return corsResponse;
   }
-  
+
   // 限流检查
   const rateLimitResponse = handleRateLimit(requestWithId);
   if (rateLimitResponse) {
     rateLimitResponse.headers.set('X-Request-Id', requestId);
     return rateLimitResponse;
   }
-  
+
   // 身份验证检查
   const authResponse = checkAuth(requestWithId);
   if (authResponse) {
     authResponse.headers.set('X-Request-Id', requestId);
     return authResponse;
   }
-  
+
   // 继续处理请求
   const response = NextResponse.next({
     request: requestWithId,
   });
-  
+
   // 设置响应头
   response.headers.set('X-Request-Id', requestId);
-  
+
   return response;
 }
 
